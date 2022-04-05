@@ -191,8 +191,10 @@ CFsurvival <- function(time, event, treat, confounders, fit.times=sort(unique(ti
         nuis$folds[event.1] <- folds.1
 
         # cohort folds #
-        if(!is.null(W_c))
+        if(!is.null(W_c)){
+            W_c <- as.data.frame(W_c)
             nuis$folds.c <- sample(rep(1:nuis$V, length = nrow(W_c)))
+        }
     }
 
     if(is.null(nuis$verbose)) nuis$verbose <- FALSE
@@ -216,7 +218,6 @@ CFsurvival <- function(time, event, treat, confounders, fit.times=sort(unique(ti
     k <- length(nuis$eval.times)
 
     confounders <- as.data.frame(confounders)
-    W_c <- as.data.frame(W_c)
 
     surv.df <- data.frame()
     result <- list(fit.times=fit.times, fit.treat=fit.treat, surv.df=surv.df)
@@ -236,26 +237,26 @@ CFsurvival <- function(time, event, treat, confounders, fit.times=sort(unique(ti
                 train_w <- nuis$folds.c != v
                 test_w <- nuis$folds.c == v
                 prop.fit.RCT <- .estimate.RCT_cohort.propensity(A=c(rep(1,sum(train)), rep(0, sum(train_w)) ),
-                                                 W=rbind(confounders[train,,drop=FALSE],
-                                                         W_c[train_w,,drop=FALSE]),
-                                                 newW=rbind(confounders[test,, drop=FALSE],
-                                                            W_c[test_w,,drop=FALSE]),
-                                                 SL.library=nuis$prop.RCT.SL.library,
-                                                 fit.treat=fit.treat,
-                                                 prop.trunc=nuis$prop.trunc,
-                                                 save.fit = nuis$save.nuis.fits,
-                                                 verbose = nuis$verbose)
+                                                                W=rbind(confounders[train,,drop=FALSE],
+                                                                        W_c[train_w,,drop=FALSE]),
+                                                                newW=rbind(confounders[test,, drop=FALSE],
+                                                                           W_c[test_w,,drop=FALSE]),
+                                                                SL.library=nuis$prop.RCT.SL.library,
+                                                                fit.treat=fit.treat,
+                                                                prop.trunc=nuis$prop.trunc,
+                                                                save.fit = nuis$save.nuis.fits,
+                                                                verbose = nuis$verbose)
                 nuis$prop.pred.RCT[test] <- prop.fit.RCT$prop.pred[1:sum(test)]
                 if(nuis$save.nuis.fits) result$prop.fits.RCT[[v]] <- prop.fit$prop.fit.RCT
             }
         } else {
             prop.fit.RCT <- .estimate.RCT_cohort.propensity(A=c(rep(1,length(treat)), rep(0, nrow(W_c)) ),
-                                             W=rbind(confounders, W_c), newW=rbind(confounders, W_c),
-                                             SL.library=nuis$prop.RCT.SL.library,
-                                             fit.treat=fit.treat,
-                                             prop.trunc=nuis$prop.trunc,
-                                             save.fit = nuis$save.nuis.fits,
-                                             verbose = FALSE)
+                                                            W=rbind(confounders, W_c), newW=rbind(confounders, W_c),
+                                                            SL.library=nuis$prop.RCT.SL.library,
+                                                            fit.treat=fit.treat,
+                                                            prop.trunc=nuis$prop.trunc,
+                                                            save.fit = nuis$save.nuis.fits,
+                                                            verbose = FALSE)
             nuis$prop.pred.RCT <- prop.fit.RCT$prop.pred[1:length(treat)]
             if(nuis$save.nuis.fits) {
                 result$prop.fit.RCT <- prop.fit$prop.fit.RCT
