@@ -38,6 +38,8 @@
     return(ret)
 }
 
+
+
 .estimate.propensity <- function(A, W, newW, SL.library, fit.treat, prop.trunc, save.fit, verbose) {
     ret <- list()
     library(SuperLearner)
@@ -64,3 +66,34 @@
     if(0 %in% fit.treat) ret$prop.pred <- pmin(ret$prop.pred, 1-prop.trunc)
     return(ret)
 }
+
+
+##############################
+.estimate.RCT_cohort.propensity <- function(A, W, newW, SL.library, fit.treat, prop.trunc, save.fit, verbose) {
+    ret <- list()
+    library(SuperLearner)
+    if (length(SL.library) == 1) {
+        if(length(unlist(SL.library)) == 2 & ncol(W) > 1) {
+            screen <- get(SL.library[[1]][2])
+            whichScreen <- screen(Y = A, X = W, family = 'binomial')
+        } else {
+            whichScreen <- rep(TRUE, ncol(W))
+        }
+        learner <- get(SL.library[[1]][1])
+        prop.fit <- learner(Y = A, X = W[,whichScreen, drop=FALSE], newX = newW[,whichScreen, drop=FALSE], family='binomial')
+        ret$prop.pred <- prop.fit$pred
+        if(save.fit) {
+            ret$prop.fit <- list(whichScreen = whichScreen, pred.alg = prop.fit)
+        }
+    } else {
+        prop.fit <- SuperLearner(Y=A, X=W, newX=newW, family='binomial',
+                                 SL.library=SL.library, #method = "method.NNloglik",
+                                 verbose = verbose)
+        ret$prop.pred <- c(prop.fit$SL.predict)
+        if(save.fit) ret$prop.fit <- prop.fit
+    }
+    if(1 %in% fit.treat) ret$prop.pred <- pmax(ret$prop.pred, prop.trunc)
+    if(0 %in% fit.treat) ret$prop.pred <- pmin(ret$prop.pred, 1-prop.trunc)
+    return(ret)
+}
+
