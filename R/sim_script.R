@@ -33,7 +33,8 @@ simulWeib <- function(N, lambda, rho, beta, rateC, X,seed)
 }
 
 #####
-simul_DML_causal <- function(N = 500, n = 250, covs = 10,
+simul_DML_causal <- function(N = 500, # n = 250,
+                             X,
                              beta_R, # = runif(n=covs,-1,1),
                              beta_A, # = runif(n=covs,-1,1),
                              beta_T, # = c(runif(n=covs,-1,1),-1),
@@ -46,7 +47,8 @@ simul_DML_causal <- function(N = 500, n = 250, covs = 10,
     library(dplyr)
     set.seed(seed)
     expit <- function(x,beta) 1/(1 + exp(-x %*% beta))
-    X <- matrix(runif(n = N*covs,-1,1), nrow = N, ncol = covs)
+    covs <- ncol(X)
+    # X <- matrix(runif(n = N*covs,-1,1), nrow = N, ncol = covs)
 
     # simulate RCT attribution #
     # beta_R <- beta_R
@@ -177,37 +179,20 @@ simul_DML_causal <- function(N = 500, n = 250, covs = 10,
         # "Delta_1_MSE" = Delta_1_MSE_out
     ))
 
-    ## Runs ##
-    # library(ggplot2)
-    # # First plot the survival curves + conf intervals + conf bands
-    # # fit$surv.df$true.surv <- c(S1(c(0, fit$fit.times)), S0(c(0, fit$fit.times)))
-    # fit$surv.df$true.surv <- c(out_S1, out_S0)
-    # ggplot(fit$surv.df) +
-    #     geom_line(aes(time, true.surv, group=trt), color='black') +
-    #     geom_step(aes(time, surv, color=as.factor(trt), group=trt)) +
-    #     geom_step(aes(time, ptwise.lower, color=as.factor(trt), group=trt), linetype=2) +
-    #     geom_step(aes(time, ptwise.upper, color=as.factor(trt), group=trt), linetype=2) +
-    #     geom_step(aes(time, unif.ew.lower, color=as.factor(trt), group=trt), linetype=3) +
-    #     geom_step(aes(time, unif.ew.upper, color=as.factor(trt), group=trt), linetype=3) +
-    #     scale_color_discrete("Treatment") +
-    #     xlab("Time") +
-    #     ylab("Survival") +
-    #     coord_cartesian(xlim=c(0,as.numeric(quantile(dat$time, 0.995))), ylim=c(0,1))
-
 }
 
 
 
 ######
 # N = 500
-# n = 250
+# # n = 250
 # covs = 10
+# X <- matrix(runif(n = N*covs,-1,1), nrow = N, ncol = covs)
 # beta_R = runif(n=covs,-1,1)
 # beta_A = runif(n=covs,-1,1)
 # beta_T = c(runif(n=covs,-1,1),-1)
 #
 # N = N
-# n = n
 # covs = covs
 # beta_R = beta_R
 # beta_A = beta_A
@@ -216,12 +201,20 @@ simul_DML_causal <- function(N = 500, n = 250, covs = 10,
 # rho = 2
 # rateC = 0.05
 #
-# fit <- simul_DML_causal(N = N, n = n, covs = covs,
+# fit <- simul_DML_causal(N = N, # n = n,
+#                              X = X,
 #                              beta_R = beta_R,
 #                              beta_A = beta_A,
 #                              beta_T = beta_T,
 #                              lambda = 0.1, rho = 2, rateC = 0.05)
 #
+# fit$Delta_0_bias
+# cumsum(fit$Delta_0_bias)
+#
+# fit$Delta_1_bias
+# cumsum(fit$Delta_1_bias)
+
+
 #
 #
 #
