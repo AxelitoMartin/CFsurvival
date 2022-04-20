@@ -165,6 +165,8 @@ simul_DML_causal <- function(N = 500, # n = 250,
     ### Bias median ###
 
     ####################
+    # merge data #
+    dat <- cbind(cbind(cbind(dat,X),A),RCT)
 
     return(list("fit" = fit,
         "fit_Cohort" = fit_Cohort,
