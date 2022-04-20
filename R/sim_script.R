@@ -86,11 +86,11 @@ simul_DML_causal <- function(N = 500, # n = 250,
 
 
     S0_RCT <- function(t){
-        sum(t0$time[RCT == 1] > t)/(N - nrow(t0[RCT == 1,] %>% filter(time < t, status == 0)))
+        sum(t0$time[RCT == 1] > t)/(sum(RCT) - nrow(t0[RCT == 1,] %>% filter(time < t, status == 0)))
         # sum(t0$time[RCT == 1] > t)/N
     }
     S1_RCT <- function(t){
-        sum(t1$time[RCT == 1] > t)/(N - nrow(t1[RCT == 1,] %>% filter(time < t, status == 0)))
+        sum(t1$time[RCT == 1] > t)/(sum(RCT) - nrow(t1[RCT == 1,] %>% filter(time < t, status == 0)))
         # sum(t1$time[RCT == 1] > t)/N
     }
     out_S0_RCT <- sapply(X = fit.times, FUN = S0_RCT)
@@ -176,9 +176,9 @@ simul_DML_causal <- function(N = 500, # n = 250,
         "out_S1_RCT" = out_S1_RCT,
         "dat" = dat,
         "Delta_0_bias" = Delta_0_bias_out,
-        "Delta_1_bias" = Delta_1_bias_out#,
-        # "Delta_0_MSE" = Delta_0_MSE_out,
-        # "Delta_1_MSE" = Delta_1_MSE_out
+        "Delta_1_bias" = Delta_1_bias_out,
+        "Delta_0_MSE" = Delta_0_MSE_out,
+        "Delta_1_MSE" = Delta_1_MSE_out
     ))
 
 }
