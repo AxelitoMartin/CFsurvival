@@ -216,11 +216,11 @@ simul_DML_causal <- function(N = 500, # n = 250,
 
 
 # ######
-# N = 2500
+# N = 1000
+# covs <- 1
 # set.seed(1)
-# covs = 1
 # X <- matrix(runif(n = N*covs,-1,1), nrow = N, ncol = covs)
-# beta_R = runif(n=covs,-0.5,0.5)
+# beta_R = runif(n=covs,-1,1)
 # beta_A = runif(n=covs,-1,1)
 # beta_T = c(runif(n=covs,-1,1),-1)
 #
@@ -233,22 +233,16 @@ simul_DML_causal <- function(N = 500, # n = 250,
 # rho = 2
 # rateC = 0.05
 #
-# prop.RCT.SL.library = c("SL.mean", "SL.glm", "SL.bayesglm")
-# prop.SL.library = c("SL.mean", "SL.glm", "SL.bayesglm")
-# event.SL.library = c( "survSL.coxph", "survSL.weibreg", "survSL.expreg")
-# cens.SL.library = c("survSL.coxph", "survSL.weibreg", "survSL.expreg")
-#
 # ex_simul <- simul_DML_causal(N = N, # n = n,
-#                         X = X,
-#                         beta_R = beta_R,
-#                         beta_A = beta_A,
-#                         beta_T = beta_T,
-#                         lambda = 0.1, rho = 2, rateC = 0.05#, s = 4#,
-#                         # prop.RCT.SL.library = prop.RCT.SL.library,
-#                         # prop.SL.library = prop.SL.library,
-#                         # event.SL.library = event.SL.library,
-#                         # cens.SL.library = cens.SL.library
-#                         )
+#                              X = X,
+#                              beta_R = beta_R,
+#                              beta_A = beta_A,
+#                              beta_T = beta_T,
+#                              prop.RCT.SL.library = c("SL.mean", "SL.glm"),
+#                              prop.SL.library = c("SL.mean", "SL.glm"),
+#                              event.SL.library = c( "survSL.coxph", "survSL.weibreg"),
+#                              cens.SL.library = c("survSL.coxph", "survSL.expreg"),
+#                              lambda = lambda, rho = rho, rateC = rateC)
 #
 # sum(ex_simul$dat$RCT)/N
 # sum(ex_simul$dat$A)/N

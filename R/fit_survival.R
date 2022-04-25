@@ -265,7 +265,7 @@ CFsurvival <- function(time, event, treat, confounders, fit.times=sort(unique(ti
         }
     }
     else{
-        nuis$prop.pred.RCT <- rep(1,length(treat))
+        nuis$prop.pred.RCT <- rep(0.5,length(treat))
     }
 
 
@@ -569,7 +569,10 @@ CFsurvival.nuisance.options <- function(cross.fit = TRUE, V = ifelse(cross.fit, 
         S.hats.t0 <- S.hats[,k]
         inner.func.1 <- ifelse(Y <= t0 & Delta == 1, 1/(S.hats.Y * G.hats.Y), 0 )
         inner.func.2 <- int.vals[,k]
-        if.func <- as.numeric(A == 1) * S.hats.t0 * ( -inner.func.1 + inner.func.2) / (g.hats * pi.RCT.hats) + S.hats.t0
+
+        # if.func <- as.numeric(A == 1) * S.hats.t0 * ( -inner.func.1 + inner.func.2) / (g.hats * pi.RCT.hats) + S.hats.t0
+        if.func <- as.numeric(A == 1) * S.hats.t0 * ( -inner.func.1 + inner.func.2) * (1 - pi.RCT.hats) / (g.hats * pi.RCT.hats) + S.hats.t0
+
         k1 <- which(fit.times == t0)
         surv[k1] <- mean(if.func)
         IF.vals[,k1] <- if.func - surv[k1]
