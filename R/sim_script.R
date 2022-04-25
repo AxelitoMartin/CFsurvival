@@ -43,7 +43,7 @@ simul_DML_causal <- function(N = 500, # n = 250,
                              prop.SL.library = c("SL.mean", "SL.bayesglm"),
                              event.SL.library = c("survSL.km", "survSL.coxph", "survSL.weibreg", "survSL.expreg"),
                              cens.SL.library = c("survSL.km", "survSL.coxph", "survSL.weibreg", "survSL.expreg"),
-                             lambda = 0.1, rho = 2, rateC = 0.05,s = 210793){
+                             lambda = 0.1, rho = 2, rateC = 0.05,s = 210793, quants = c(0.75,0.5,0.25)){
 
     library(dplyr)
     set.seed(s)
@@ -163,8 +163,31 @@ simul_DML_causal <- function(N = 500, # n = 250,
     Delta_1_MSE_out <- sapply(X = fit.times, FUN = Delta_1_MSE)
 
 
-    ### Median ###
-    ### Bias median ###
+    ### Quantile ###
+    ### Quantile bias ###
+    quantile_bias <- function(quants,time_surv,survival){
+        time_quant <- c()
+        for(i in 1:length(quants)){
+            ind <- which.min(abs(quants[i] - survival))
+            time_quant[i] <- time_surv[ind]
+        }
+        return(time_quant)
+    }
+
+    # no treatment #
+    quant_bias_0 <- quantile_bias(quants = quants, time_surv = fit.times, survival = out_S0) -
+        quantile_bias(quants = quants, time_surv = fit.times, survival = fit_Cohort$surv.df$surv[fit_Cohort$surv.df$trt == 0])
+    names(quant_bias_0) <- quants
+
+    # treatment #
+    quant_bias_1 <- quantile_bias(quants = quants, time_surv = fit.times, survival = out_S1) -
+        quantile_bias(quants = quants, time_surv = fit.times, survival = fit_Cohort$surv.df$surv[fit_Cohort$surv.df$trt == 1])
+    names(quant_bias_1) <- quants
+
+    ### Quantile MSE ###
+    quant_MSE_0 <- quant_bias_0^2
+    quant_MSE_1 <- quant_bias_1^2
+
 
     ####################
     # merge data #
@@ -180,19 +203,24 @@ simul_DML_causal <- function(N = 500, # n = 250,
                 "Delta_0_bias" = Delta_0_bias_out,
                 "Delta_1_bias" = Delta_1_bias_out,
                 "Delta_0_MSE" = Delta_0_MSE_out,
-                "Delta_1_MSE" = Delta_1_MSE_out
+                "Delta_1_MSE" = Delta_1_MSE_out,
+                "quant_bias_0" = quant_bias_0,
+                "quant_bias_1" = quant_bias_1,
+                "quant_MSE_0" = quant_MSE_0,
+                "quant_MSE_1" = quant_MSE_1,
+                "gRs" = gRs
     ))
 
 }
 
 
 
-######
-# N = 2000
-# # n = 250
+# ######
+# N = 2500
+# set.seed(1)
 # covs = 1
 # X <- matrix(runif(n = N*covs,-1,1), nrow = N, ncol = covs)
-# beta_R = runif(n=covs,-1,1)
+# beta_R = runif(n=covs,-0.5,0.5)
 # beta_A = runif(n=covs,-1,1)
 # beta_T = c(runif(n=covs,-1,1),-1)
 #
@@ -205,29 +233,42 @@ simul_DML_causal <- function(N = 500, # n = 250,
 # rho = 2
 # rateC = 0.05
 #
-# prop.RCT.SL.library = c("SL.mean", "SL.glm")
-# prop.SL.library = c("SL.mean", "SL.glm")
-# event.SL.library = c( "survSL.coxph", "survSL.weibreg")
-# cens.SL.library = c("survSL.coxph", "survSL.expreg")
+# prop.RCT.SL.library = c("SL.mean", "SL.glm", "SL.bayesglm")
+# prop.SL.library = c("SL.mean", "SL.glm", "SL.bayesglm")
+# event.SL.library = c( "survSL.coxph", "survSL.weibreg", "survSL.expreg")
+# cens.SL.library = c("survSL.coxph", "survSL.weibreg", "survSL.expreg")
 #
 # ex_simul <- simul_DML_causal(N = N, # n = n,
 #                         X = X,
 #                         beta_R = beta_R,
 #                         beta_A = beta_A,
 #                         beta_T = beta_T,
-#                         lambda = 0.1, rho = 2, rateC = 0.05, s = 1,
-#                         prop.RCT.SL.library = prop.RCT.SL.library,
-#                         prop.SL.library = prop.SL.library,
-#                         event.SL.library = event.SL.library,
-#                         cens.SL.library = cens.SL.library)
+#                         lambda = 0.1, rho = 2, rateC = 0.05#, s = 4#,
+#                         # prop.RCT.SL.library = prop.RCT.SL.library,
+#                         # prop.SL.library = prop.SL.library,
+#                         # event.SL.library = event.SL.library,
+#                         # cens.SL.library = cens.SL.library
+#                         )
 #
 # sum(ex_simul$dat$RCT)/N
+# sum(ex_simul$dat$A)/N
+# sum(ex_simul$dat$status)/N
+#
+# summary(ex_simul$fit_Cohort$nuisance$prop.pred.RCT)
+# summary(ex_simul$fit_Cohort$nuisance$prop.pred)
 #
 # ex_simul$Delta_0_bias
 # cumsum(ex_simul$Delta_0_bias)
 #
 # ex_simul$Delta_1_bias
 # cumsum(ex_simul$Delta_1_bias)
+#
+# # quantile stuff #
+# ex_simul$quant_bias_0
+# ex_simul$quant_bias_1
+#
+# ex_simul$quant_MSE_0
+# ex_simul$quant_MSE_1
 #
 # summary(ex_simul$fit_Cohort$nuisance$prop.pred.RCT)
 #
@@ -246,7 +287,7 @@ simul_DML_causal <- function(N = 500, # n = 250,
 #     scale_color_discrete("Treatment") +
 #     xlab("Time") +
 #     ylab("Survival") +
-#     coord_cartesian(xlim=c(0,as.numeric(quantile(ex_simul$dat$time, 0.995))), ylim=c(0,1))
+#     coord_cartesian(xlim=c(0,as.numeric(quantile(ex_simul$dat$time[ex_simul$dat$RCT == 1], 0.995))), ylim=c(0,1))
 #
 #
 #
@@ -261,4 +302,4 @@ simul_DML_causal <- function(N = 500, # n = 250,
 #     scale_color_discrete("Treatment") +
 #     xlab("Time") +
 #     ylab("Survival") +
-#     coord_cartesian(xlim=c(0,as.numeric(quantile(ex_simul$dat$time, 0.995))), ylim=c(0,1))
+#     coord_cartesian(xlim=c(0,as.numeric(quantile(ex_simul$dat$time[ex_simul$dat$RCT == 1], 0.995))), ylim=c(0,1))
