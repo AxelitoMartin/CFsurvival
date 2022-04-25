@@ -149,6 +149,7 @@ CFsurvival <- function(time, event, treat, confounders, fit.times=sort(unique(ti
     nuis <- do.call("CFsurvival.nuisance.options", nuisance.options)
 
     n <- length(time)
+    confounders <- as.data.frame(confounders)
 
     if(sum(1-event) == 0) {
         message("No censored events; unanticipated errors may occur.")
@@ -193,6 +194,7 @@ CFsurvival <- function(time, event, treat, confounders, fit.times=sort(unique(ti
         # cohort folds #
         if(!is.null(W_c)){
             W_c <- as.data.frame(W_c)
+            colnames(W_c) <- colnames(confounders)
             nuis$folds.c <- sample(rep(1:nuis$V, length = nrow(W_c)))
         }
     }
@@ -217,7 +219,6 @@ CFsurvival <- function(time, event, treat, confounders, fit.times=sort(unique(ti
     if(is.null(nuis$eval.times)) nuis$eval.times <- sort(unique(c(0,time[time > 0 & time <= max(fit.times)], max(fit.times))))
     k <- length(nuis$eval.times)
 
-    confounders <- as.data.frame(confounders)
 
     surv.df <- data.frame()
     result <- list(fit.times=fit.times, fit.treat=fit.treat, surv.df=surv.df)

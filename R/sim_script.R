@@ -89,11 +89,11 @@ simul_DML_causal <- function(N = 500, # n = 250,
 
     S0_RCT <- function(t){
         # sum(t0$time[RCT == 1] > t)/(sum(RCT) - nrow(t0[RCT == 1,] %>% filter(time < t, status == 0)))
-        sum(t0$true_time[RCT == 1] > t)/N
+        sum(t0$true_time[RCT == 1] > t)/sum(RCT)
     }
     S1_RCT <- function(t){
         # sum(t1$time[RCT == 1] > t)/(sum(RCT) - nrow(t1[RCT == 1,] %>% filter(time < t, status == 0)))
-        sum(t1$true_time[RCT == 1] > t)/N
+        sum(t1$true_time[RCT == 1] > t)/sum(RCT)
     }
     out_S0_RCT <- sapply(X = fit.times, FUN = S0_RCT)
     out_S1_RCT <- sapply(X = fit.times, FUN = S1_RCT)
@@ -120,15 +120,15 @@ simul_DML_causal <- function(N = 500, # n = 250,
 
     ### adding in the cohort data ###
     fit_Cohort <- CFsurvival(time = obs.time, event = obs.event, treat = rx,
-                      confounders =  confounders, contrasts = NULL,
-                      verbose = TRUE, fit.times = fit.times,
-                      fit.treat = c(0,1),
-                      nuisance.options = list(
-                          prop.RCT.SL.library = prop.RCT.SL.library,
-                          prop.SL.library = prop.SL.library,
-                          event.SL.library = event.SL.library,
-                          cens.SL.library = cens.SL.library),
-                      W_c = W_c)
+                             confounders =  confounders, contrasts = NULL,
+                             verbose = TRUE, fit.times = fit.times,
+                             fit.treat = c(0,1),
+                             nuisance.options = list(
+                                 prop.RCT.SL.library = prop.RCT.SL.library,
+                                 prop.SL.library = prop.SL.library,
+                                 event.SL.library = event.SL.library,
+                                 cens.SL.library = cens.SL.library),
+                             W_c = W_c)
 
 
 
@@ -171,16 +171,16 @@ simul_DML_causal <- function(N = 500, # n = 250,
     dat <- cbind(cbind(cbind(dat,X),A),RCT)
 
     return(list("fit" = fit,
-        "fit_Cohort" = fit_Cohort,
-        "out_S0" = out_S0,
-        "out_S1" = out_S1,
-        "out_S0_RCT" = out_S0_RCT,
-        "out_S1_RCT" = out_S1_RCT,
-        "dat" = dat,
-        "Delta_0_bias" = Delta_0_bias_out,
-        "Delta_1_bias" = Delta_1_bias_out,
-        "Delta_0_MSE" = Delta_0_MSE_out,
-        "Delta_1_MSE" = Delta_1_MSE_out
+                "fit_Cohort" = fit_Cohort,
+                "out_S0" = out_S0,
+                "out_S1" = out_S1,
+                "out_S0_RCT" = out_S0_RCT,
+                "out_S1_RCT" = out_S1_RCT,
+                "dat" = dat,
+                "Delta_0_bias" = Delta_0_bias_out,
+                "Delta_1_bias" = Delta_1_bias_out,
+                "Delta_0_MSE" = Delta_0_MSE_out,
+                "Delta_1_MSE" = Delta_1_MSE_out
     ))
 
 }
@@ -188,9 +188,9 @@ simul_DML_causal <- function(N = 500, # n = 250,
 
 
 ######
-# N = 500
+# N = 2000
 # # n = 250
-# covs = 2
+# covs = 1
 # X <- matrix(runif(n = N*covs,-1,1), nrow = N, ncol = covs)
 # beta_R = runif(n=covs,-1,1)
 # beta_A = runif(n=covs,-1,1)
@@ -205,27 +205,38 @@ simul_DML_causal <- function(N = 500, # n = 250,
 # rho = 2
 # rateC = 0.05
 #
-# fit <- simul_DML_causal(N = N, # n = n,
-#                              X = X,
-#                              beta_R = beta_R,
-#                              beta_A = beta_A,
-#                              beta_T = beta_T,
-#                              lambda = 0.1, rho = 2, rateC = 0.05)
+# prop.RCT.SL.library = c("SL.mean", "SL.glm")
+# prop.SL.library = c("SL.mean", "SL.glm")
+# event.SL.library = c( "survSL.coxph", "survSL.weibreg")
+# cens.SL.library = c("survSL.coxph", "survSL.expreg")
 #
-# fit$Delta_0_bias
-# cumsum(fit$Delta_0_bias)
+# ex_simul <- simul_DML_causal(N = N, # n = n,
+#                         X = X,
+#                         beta_R = beta_R,
+#                         beta_A = beta_A,
+#                         beta_T = beta_T,
+#                         lambda = 0.1, rho = 2, rateC = 0.05, s = 1,
+#                         prop.RCT.SL.library = prop.RCT.SL.library,
+#                         prop.SL.library = prop.SL.library,
+#                         event.SL.library = event.SL.library,
+#                         cens.SL.library = cens.SL.library)
 #
-# fit$Delta_1_bias
-# cumsum(fit$Delta_1_bias)
+# sum(ex_simul$dat$RCT)/N
 #
+# ex_simul$Delta_0_bias
+# cumsum(ex_simul$Delta_0_bias)
 #
+# ex_simul$Delta_1_bias
+# cumsum(ex_simul$Delta_1_bias)
+#
+# summary(ex_simul$fit_Cohort$nuisance$prop.pred.RCT)
 #
 #
 # library(ggplot2)
 # # First plot the survival curves + conf intervals + conf bands
 # # fit$surv.df$true.surv <- c(S1(c(0, fit$fit.times)), S0(c(0, fit$fit.times)))
-# fit$fit$surv.df$true.surv <- c(fit$out_S1, fit$out_S0)
-# ggplot(fit$fit$surv.df) +
+# ex_simul$fit$surv.df$true.surv <- c(ex_simul$out_S1, ex_simul$out_S0)
+# ggplot(ex_simul$fit$surv.df) +
 #     geom_line(aes(time, true.surv, group=trt), color='black') +
 #     geom_step(aes(time, surv, color=as.factor(trt), group=trt)) +
 #     geom_step(aes(time, ptwise.lower, color=as.factor(trt), group=trt), linetype=2) +
@@ -235,4 +246,19 @@ simul_DML_causal <- function(N = 500, # n = 250,
 #     scale_color_discrete("Treatment") +
 #     xlab("Time") +
 #     ylab("Survival") +
-#     coord_cartesian(xlim=c(0,as.numeric(quantile(fit$dat$time, 0.995))), ylim=c(0,1))
+#     coord_cartesian(xlim=c(0,as.numeric(quantile(ex_simul$dat$time, 0.995))), ylim=c(0,1))
+#
+#
+#
+# ex_simul$fit_Cohort$surv.df$true.surv <- c(ex_simul$out_S1, ex_simul$out_S0)
+# ggplot(ex_simul$fit_Cohort$surv.df) +
+#     geom_line(aes(time, true.surv, group=trt), color='black') +
+#     geom_step(aes(time, surv, color=as.factor(trt), group=trt)) +
+#     geom_step(aes(time, ptwise.lower, color=as.factor(trt), group=trt), linetype=2) +
+#     geom_step(aes(time, ptwise.upper, color=as.factor(trt), group=trt), linetype=2) +
+#     geom_step(aes(time, unif.ew.lower, color=as.factor(trt), group=trt), linetype=3) +
+#     geom_step(aes(time, unif.ew.upper, color=as.factor(trt), group=trt), linetype=3) +
+#     scale_color_discrete("Treatment") +
+#     xlab("Time") +
+#     ylab("Survival") +
+#     coord_cartesian(xlim=c(0,as.numeric(quantile(ex_simul$dat$time, 0.995))), ylim=c(0,1))
