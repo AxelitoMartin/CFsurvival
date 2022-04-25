@@ -28,7 +28,8 @@ simulWeib <- function(N, lambda, rho, beta, rateC, X,s)
     # data set
     data.frame(
         time=time,
-        status=status
+        status=status,
+        true_time = Tlat
     )
 }
 
@@ -74,24 +75,25 @@ simul_DML_causal <- function(N = 500, # n = 250,
     fit.times = seq(0, as.numeric(quantile(dat$time[RCT == 1], 0.995)), by=0.1)
 
     S0 <- function(t){
-        sum(t0$time > t)/(N - nrow(t0 %>% filter(time < t, status == 0)))
-        # sum(t0$time > t)/N
+        # sum(t0$time > t)/(N - nrow(t0 %>% filter(time < t, status == 0)))
+        sum(t0$true_time > t)/N
 
     }
     S1 <- function(t){
-        sum(t1$time > t)/(N - nrow(t1 %>% filter(time < t, status == 0)))
+        sum(t1$true_time > t)/N
+        # sum(t1$time > t)/(N - nrow(t1 %>% filter(time < t, status == 0)))
     }
     out_S0 <- sapply(X = fit.times, FUN = S0)
     out_S1 <- sapply(X = fit.times, FUN = S1)
 
 
     S0_RCT <- function(t){
-        sum(t0$time[RCT == 1] > t)/(sum(RCT) - nrow(t0[RCT == 1,] %>% filter(time < t, status == 0)))
-        # sum(t0$time[RCT == 1] > t)/N
+        # sum(t0$time[RCT == 1] > t)/(sum(RCT) - nrow(t0[RCT == 1,] %>% filter(time < t, status == 0)))
+        sum(t0$true_time[RCT == 1] > t)/N
     }
     S1_RCT <- function(t){
-        sum(t1$time[RCT == 1] > t)/(sum(RCT) - nrow(t1[RCT == 1,] %>% filter(time < t, status == 0)))
-        # sum(t1$time[RCT == 1] > t)/N
+        # sum(t1$time[RCT == 1] > t)/(sum(RCT) - nrow(t1[RCT == 1,] %>% filter(time < t, status == 0)))
+        sum(t1$true_time[RCT == 1] > t)/N
     }
     out_S0_RCT <- sapply(X = fit.times, FUN = S0_RCT)
     out_S1_RCT <- sapply(X = fit.times, FUN = S1_RCT)
@@ -188,7 +190,7 @@ simul_DML_causal <- function(N = 500, # n = 250,
 ######
 # N = 500
 # # n = 250
-# covs = 10
+# covs = 2
 # X <- matrix(runif(n = N*covs,-1,1), nrow = N, ncol = covs)
 # beta_R = runif(n=covs,-1,1)
 # beta_A = runif(n=covs,-1,1)
@@ -215,8 +217,7 @@ simul_DML_causal <- function(N = 500, # n = 250,
 #
 # fit$Delta_1_bias
 # cumsum(fit$Delta_1_bias)
-
-
+#
 #
 #
 #
