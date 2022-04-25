@@ -8,15 +8,17 @@
 # rm(list=ls())
 
 # survival function generation #
-simulWeib <- function(N, lambda, rho, beta, rateC, X,s)
+simulWeib <- function(N, lambda, rho, beta, rateC, X,s, interactions = NULL, A = NULL, covs_int = NULL)
 {
     set.seed(s)
+    if(is.null(interactions))
+        interactions = 0
     # Weibull latent event times
     v <- runif(n=N)
-    if(!is.null(dim(X)))
-        Tlat <- (- log(v) / (lambda * exp(X %*% beta)))^(1 / rho)
-    else
-        Tlat <- (- log(v) / (lambda * exp(X * beta)))^(1 / rho)
+    # if(!is.null(dim(covs_int)))
+    Tlat <- (- log(v) / (lambda * exp(X %*% beta + A*covs_int %*% interactions)))^(1 / rho)
+    # else
+    #     Tlat <- (- log(v) / (lambda * exp(X * beta + A*X * interactions )))^(1 / rho)
 
     # censoring times
     C <- rexp(n=N, rate=rateC)
@@ -43,7 +45,10 @@ simul_DML_causal <- function(N = 500, # n = 250,
                              prop.SL.library = c("SL.mean", "SL.bayesglm"),
                              event.SL.library = c("survSL.km", "survSL.coxph", "survSL.weibreg", "survSL.expreg"),
                              cens.SL.library = c("survSL.km", "survSL.coxph", "survSL.weibreg", "survSL.expreg"),
-                             lambda = 0.1, rho = 2, rateC = 0.05,s = 210793, quants = c(0.75,0.5,0.25)){
+                             lambda = 0.1, rho = 2, rateC = 0.05,s = 210793, quants = c(0.75,0.5,0.25),
+                             # parameters for interactions #
+                             beta_interactions = NULL
+                             ){
 
     library(dplyr)
     set.seed(s)
@@ -64,11 +69,13 @@ simul_DML_causal <- function(N = 500, # n = 250,
 
     # time #
     # beta_T <- beta_T
+    # beta_interactions <- c(1, rep(0, covs-1))
     lambdaT=0.1
     rhoT=2
-    dat <- simulWeib(N=N, lambda=lambdaT, rho=rhoT, beta=beta_T, rateC=rateC, X = cbind(X,A),s = s+1)
-    t0 <- simulWeib(N=N, lambda=lambdaT, rho=rhoT, beta=beta_T, rateC=rateC, X = cbind(X,0),s = s+1)
-    t1 <- simulWeib(N=N, lambda=lambdaT, rho=rhoT, beta=beta_T, rateC=rateC, X = cbind(X,1),s = s+1)
+    X_temp <- X
+    dat <- simulWeib(N=N, lambda=lambdaT, rho=rhoT, beta=beta_T, rateC=rateC, X = cbind(X,A),s = s+1, interactions = beta_interactions, A = A, covs_int = X_temp)
+    t0 <- simulWeib(N=N, lambda=lambdaT, rho=rhoT, beta=beta_T, rateC=rateC, X = cbind(X,0),s = s+1, interactions = beta_interactions, A = 0, covs_int = X_temp)
+    t1 <- simulWeib(N=N, lambda=lambdaT, rho=rhoT, beta=beta_T, rateC=rateC, X = cbind(X,1),s = s+1, interactions = beta_interactions, A = 1, covs_int = X_temp)
     summary(dat$time)
     sum(dat$status)
 
@@ -215,9 +222,9 @@ simul_DML_causal <- function(N = 500, # n = 250,
 
 
 
-# ######
+# # ######
 # N = 1000
-# covs <- 1
+# covs <- 10
 # set.seed(1)
 # X <- matrix(runif(n = N*covs,-1,1), nrow = N, ncol = covs)
 # beta_R = runif(n=covs,-1,1)
@@ -242,7 +249,8 @@ simul_DML_causal <- function(N = 500, # n = 250,
 #                              prop.SL.library = c("SL.mean", "SL.glm"),
 #                              event.SL.library = c( "survSL.coxph", "survSL.weibreg"),
 #                              cens.SL.library = c("survSL.coxph", "survSL.expreg"),
-#                              lambda = lambda, rho = rho, rateC = rateC)
+#                              lambda = lambda, rho = rho, rateC = rateC,beta_interactions = c(1,rep(0,9))
+#                              )
 #
 # sum(ex_simul$dat$RCT)/N
 # sum(ex_simul$dat$A)/N
