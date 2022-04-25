@@ -12,7 +12,7 @@ simulWeib <- function(N, lambda, rho, beta, rateC, X,s, interactions = NULL, A =
 {
     set.seed(s)
     if(is.null(interactions))
-        interactions = 0
+        interactions = rep(0,ncol(X)-1)
     # Weibull latent event times
     v <- runif(n=N)
     # if(!is.null(dim(covs_int)))
@@ -249,9 +249,9 @@ simul_DML_causal <- function(N = 500, # n = 250,
 #                              prop.SL.library = c("SL.mean", "SL.glm"),
 #                              event.SL.library = c( "survSL.coxph", "survSL.weibreg"),
 #                              cens.SL.library = c("survSL.coxph", "survSL.expreg"),
-#                              lambda = lambda, rho = rho, rateC = rateC,beta_interactions = c(1,rep(0,9))
+#                              lambda = lambda, rho = rho, rateC = rateC#, beta_interactions = c(1,rep(0,9))
 #                              )
-#
+
 # sum(ex_simul$dat$RCT)/N
 # sum(ex_simul$dat$A)/N
 # sum(ex_simul$dat$status)/N
