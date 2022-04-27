@@ -251,7 +251,7 @@ simul_DML_causal <- function(N = 500, # n = 250,
 #                              cens.SL.library = c("survSL.coxph", "survSL.expreg"),
 #                              lambda = lambda, rho = rho, rateC = rateC#, beta_interactions = c(1,rep(0,9))
 #                              )
-
+#
 # sum(ex_simul$dat$RCT)/N
 # sum(ex_simul$dat$A)/N
 # sum(ex_simul$dat$status)/N

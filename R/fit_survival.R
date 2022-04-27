@@ -265,7 +265,8 @@ CFsurvival <- function(time, event, treat, confounders, fit.times=sort(unique(ti
         }
     }
     else{
-        nuis$prop.pred.RCT <- rep(0.5,length(treat))
+        # nuis$prop.pred.RCT <- rep(0.5,length(treat))
+        nuis$prop.pred.RCT <- rep(1,length(treat))
     }
 
 
@@ -344,7 +345,10 @@ CFsurvival <- function(time, event, treat, confounders, fit.times=sort(unique(ti
     #### ESTIMATE CF SURVIVALS ####
     if(verbose) message("Computing counterfactual survivals...")
     if(0 %in% fit.treat) {
-        surv.0 <- .get.survival(Y=time, Delta=event, A=1-treat, fit.times=fit.times, eval.times=nuis$eval.times, S.hats=nuis$event.pred.0, G.hats=nuis$cens.pred.0, g.hats=1-nuis$prop.pred,pi.RCT.hats = nuis$prop.pred.RCT)
+        # surv.0 <- .get.survival(Y=time, Delta=event, A=1-treat, fit.times=fit.times, eval.times=nuis$eval.times, S.hats=nuis$event.pred.0, G.hats=nuis$cens.pred.0, g.hats=1-nuis$prop.pred,pi.RCT.hats = nuis$prop.pred.RCT)
+        surv.0 <- .get.survival2(Y=time, Delta=event, A=1-treat, fit.times=fit.times, eval.times=nuis$eval.times, S.hats=nuis$event.pred.0, G.hats=nuis$cens.pred.0,
+                                 g.hats=1-nuis$prop.pred,pi.RCT.hats = nuis$prop.pred.RCT, time_c = NULL, rx_c = NULL, W_c = W_c)
+
         surv.df.0 <- data.frame(time=c(0,fit.times), trt=0, surv=c(1, surv.0$surv.iso))
         result$IF.vals.0 <- surv.0$IF.vals
 
@@ -377,7 +381,10 @@ CFsurvival <- function(time, event, treat, confounders, fit.times=sort(unique(ti
     }
 
     if(1 %in% fit.treat) {
-        surv.1 <- .get.survival(Y=time, Delta=event, A=treat, fit.times=fit.times, eval.times=nuis$eval.times, S.hats=nuis$event.pred.1, G.hats=nuis$cens.pred.1, g.hats=nuis$prop.pred,pi.RCT.hats = nuis$prop.pred.RCT)
+        # surv.1 <- .get.survival(Y=time, Delta=event, A=treat, fit.times=fit.times, eval.times=nuis$eval.times, S.hats=nuis$event.pred.1, G.hats=nuis$cens.pred.1, g.hats=nuis$prop.pred,pi.RCT.hats = nuis$prop.pred.RCT)
+        surv.1 <- .get.survival2(Y=time, Delta=event, A=treat, fit.times=fit.times, eval.times=nuis$eval.times, S.hats=nuis$event.pred.1, G.hats=nuis$cens.pred.1,
+                                 g.hats=nuis$prop.pred,pi.RCT.hats = nuis$prop.pred.RCT, time_c = NULL, rx_c = NULL, W_c = W_c)
+
         surv.df.1 <- data.frame(time=c(0,fit.times), trt=1, surv=c(1, surv.1$surv.iso))
         result$IF.vals.1 <- surv.1$IF.vals
 
@@ -585,6 +592,56 @@ CFsurvival.nuisance.options <- function(cross.fit = TRUE, V = ifelse(cross.fit, 
 
     return(res)
 }
+
+##### temp modified survival IF estimation #####
+
+.get.survival2 <- function(Y, Delta, A, fit.times, eval.times, S.hats, G.hats, g.hats, pi.RCT.hats, isotonize=TRUE, time_c = NULL, rx_c = NULL, W_c = NULL) {
+
+    if(!is.null(W_c))
+        addons <- nrow(W_c)
+    else
+        addons <- 0
+    fit.times <- fit.times[fit.times > 0]
+    n <- length(Y)
+    ord <- order(eval.times)
+    eval.times <- eval.times[ord]
+    S.hats <- S.hats[,ord]
+    G.hats <- G.hats[,ord]
+
+    int.vals <- t(sapply(1:n, function(i) {
+        vals <- diff(1/S.hats[i,])* 1/ G.hats[i,-ncol(G.hats)]
+        if(any(eval.times[-1] > Y[i])) vals[eval.times[-1] > Y[i]] <- 0
+        c(0,cumsum(vals))
+    }))
+    S.hats.Y <- sapply(1:n, function(i) stepfun(eval.times, c(1,S.hats[i,]), right = FALSE)(Y[i]))
+    G.hats.Y <- sapply(1:n, function(i) stepfun(eval.times, c(1,G.hats[i,]), right = TRUE)(Y[i]))
+    IF.vals <- matrix(NA, nrow=n+addons, ncol=length(fit.times))
+    surv <- rep(NA, length(fit.times))
+    for(t0 in fit.times) {
+        k <- min(which(eval.times >= t0))
+        S.hats.t0 <- S.hats[,k]
+        inner.func.1 <- ifelse(Y <= t0 & Delta == 1, 1/(S.hats.Y * G.hats.Y), 0 )
+        inner.func.2 <- int.vals[,k]
+
+        # if.func <- as.numeric(A == 1) * S.hats.t0 * ( -inner.func.1 + inner.func.2) / (g.hats * pi.RCT.hats) + S.hats.t0
+        if.func <- c(as.numeric(A == 1) * S.hats.t0 * ( -inner.func.1 + inner.func.2) / (g.hats * pi.RCT.hats) + S.hats.t0,
+                     rep(mean(S.hats[,k]), addons))
+
+        k1 <- which(fit.times == t0)
+        surv[k1] <- mean(if.func)
+        IF.vals[,k1] <- if.func - surv[k1]
+    }
+
+    res <- list(times=fit.times, surv=pmin(1,pmax(0,surv)), IF.vals=IF.vals)
+    if(isotonize) {
+        res$surv.iso <- NA
+        res$surv.iso[!is.na(res$surv)] <- 1 - isoreg(res$times[!is.na(res$surv)], 1-res$surv[!is.na(res$surv)])$yf
+    }
+
+    return(res)
+}
+
+
 
 .surv.confints <- function(times, est, IF.vals, isotonize=TRUE, conf.band=TRUE, band.end.pts=c(0,Inf), conf.level=.95) {
     logit <- function(x) log(x / (1-x))
