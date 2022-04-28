@@ -47,8 +47,8 @@ simul_DML_causal <- function(N = 500, # n = 250,
                              cens.SL.library = c("survSL.km", "survSL.coxph", "survSL.weibreg", "survSL.expreg"),
                              lambda = 0.1, rho = 2, rateC = 0.05,s = 210793, quants = c(0.75,0.5,0.25),
                              # parameters for interactions #
-                             beta_interactions = NULL , include_treat = FALSE
-                             ){
+                             beta_interactions = NULL
+){
 
     library(dplyr)
     set.seed(s)
@@ -114,16 +114,16 @@ simul_DML_causal <- function(N = 500, # n = 250,
     W_c <- X[RCT == 0,]
 
     # run model #
-    fit <- CFsurvival(time = obs.time, event = obs.event, treat = rx,
-                      confounders =  confounders, contrasts = NULL,
-                      verbose = TRUE, fit.times = fit.times,
-                      fit.treat = c(0,1),
-                      nuisance.options = list(
-                          prop.RCT.SL.library = prop.RCT.SL.library,
-                          prop.SL.library = prop.SL.library,
-                          event.SL.library = event.SL.library,
-                          cens.SL.library = cens.SL.library),
-                      W_c = NULL)
+    # fit <- CFsurvival(time = obs.time, event = obs.event, treat = rx,
+    #                   confounders =  confounders, contrasts = NULL,
+    #                   verbose = TRUE, fit.times = fit.times,
+    #                   fit.treat = c(0,1),
+    #                   nuisance.options = list(
+    #                       prop.RCT.SL.library = prop.RCT.SL.library,
+    #                       prop.SL.library = prop.SL.library,
+    #                       event.SL.library = event.SL.library,
+    #                       cens.SL.library = cens.SL.library),
+    #                   W_c = NULL)
 
     ### adding in the cohort data ###
     fit_Cohort <- CFsurvival(time = obs.time, event = obs.event, treat = rx,
@@ -135,9 +135,8 @@ simul_DML_causal <- function(N = 500, # n = 250,
                                  prop.SL.library = prop.SL.library,
                                  event.SL.library = event.SL.library,
                                  cens.SL.library = cens.SL.library),
-                             W_c = W_c,
-                             treat_c = ifelse(include_treat, A[RCT == 0], NULL)
-                             )
+                             W_c = W_c
+    )
 
 
 
@@ -202,22 +201,23 @@ simul_DML_causal <- function(N = 500, # n = 250,
     # merge data #
     dat <- cbind(cbind(cbind(dat,X),A),RCT)
 
-    return(list("fit" = fit,
-                "fit_Cohort" = fit_Cohort,
-                "out_S0" = out_S0,
-                "out_S1" = out_S1,
-                "out_S0_RCT" = out_S0_RCT,
-                "out_S1_RCT" = out_S1_RCT,
-                "dat" = dat,
-                "Delta_0_bias" = Delta_0_bias_out,
-                "Delta_1_bias" = Delta_1_bias_out,
-                "Delta_0_MSE" = Delta_0_MSE_out,
-                "Delta_1_MSE" = Delta_1_MSE_out,
-                "quant_bias_0" = quant_bias_0,
-                "quant_bias_1" = quant_bias_1,
-                "quant_MSE_0" = quant_MSE_0,
-                "quant_MSE_1" = quant_MSE_1,
-                "gRs" = gRs
+    return(list(
+        # "fit" = fit,
+        "fit_Cohort" = fit_Cohort,
+        "out_S0" = out_S0,
+        "out_S1" = out_S1,
+        "out_S0_RCT" = out_S0_RCT,
+        "out_S1_RCT" = out_S1_RCT,
+        "dat" = dat,
+        "Delta_0_bias" = Delta_0_bias_out,
+        "Delta_1_bias" = Delta_1_bias_out,
+        "Delta_0_MSE" = Delta_0_MSE_out,
+        "Delta_1_MSE" = Delta_1_MSE_out,
+        "quant_bias_0" = quant_bias_0,
+        "quant_bias_1" = quant_bias_1,
+        "quant_MSE_0" = quant_MSE_0,
+        "quant_MSE_1" = quant_MSE_1,
+        "gRs" = gRs
     ))
 
 }
@@ -226,8 +226,8 @@ simul_DML_causal <- function(N = 500, # n = 250,
 
 # ######
 # N = 1000
-# covs <- 10
-# set.seed(1)
+# covs <- 5
+# set.seed(133)
 # X <- matrix(runif(n = N*covs,-1,1), nrow = N, ncol = covs)
 # beta_R = runif(n=covs,-1,1)
 # beta_A = runif(n=covs,-1,1)
@@ -251,9 +251,9 @@ simul_DML_causal <- function(N = 500, # n = 250,
 #                              prop.SL.library = c("SL.mean", "SL.glm"),
 #                              event.SL.library = c( "survSL.coxph", "survSL.weibreg"),
 #                              cens.SL.library = c("survSL.coxph", "survSL.expreg"),
-#                              lambda = lambda, rho = rho, rateC = rateC, include_treat = TRUE
-#  # , beta_interactions = c(1,rep(0,9))
-#                               )
+#                              lambda = lambda, rho = rho, rateC = rateC
+#                              # , beta_interactions = c(1,rep(0,9))
+# )
 #
 # sum(ex_simul$dat$RCT)/N
 # sum(ex_simul$dat$A)/N

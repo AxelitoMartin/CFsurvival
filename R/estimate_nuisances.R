@@ -39,7 +39,7 @@
     ret$event.coef <- fit$event.coef
     ret$cens.coef <- fit$cens.coef
 
-    if(!is.null(W_c_test) && !is.null(treat_c_test)){
+    if(!is.null(W_c_test)){
         # message("Adding conditional cohort predictions...")
         #### cohort if it exists lol ####
         newAW_c <- rbind(cbind(A=0, W_c_test), cbind(A=1, W_c_test))

@@ -272,7 +272,7 @@ CFsurvival <- function(time, event, treat, confounders, fit.times=sort(unique(ti
 
 
     #### ESTIMATE PROPENSITY ####
-
+    # this should be just the mean of treatment assignment #
     if(is.null(nuis$prop.pred)) {
         if(verbose) message("Estimating propensities...")
         nuis$prop.pred <- rep(NA, n)
@@ -295,34 +295,36 @@ CFsurvival <- function(time, event, treat, confounders, fit.times=sort(unique(ti
         }
     }
 
-    #### ESTIMATE CONDITIONAL SURVIVALS ####
 
+    #### ESTIMATE CONDITIONAL SURVIVALS ####
 
     if((1 %in% fit.treat & (is.null(nuis$event.pred.1) | is.null(nuis$cens.pred.1))) | (0 %in% fit.treat & (is.null(nuis$event.pred.0) | is.null(nuis$cens.pred.0)))) {
         if(verbose) message("Estimating conditional survivals...")
         if(0 %in% fit.treat & is.null(nuis$event.pred.0)) {
             do.event.pred.0 <- TRUE
             nuis$event.pred.0 <- matrix(NA, nrow=n, ncol=k)
-            if(!is.null(treat_c))
-                nuis$event.pred.0_c <- matrix(NA, nrow=nrow(W_c), ncol=k)
+            if(!is.null(W_c))
+                event.pred.0_c <- list()# matrix(NA, nrow=nrow(W_c), ncol=k)
         } else do.event.pred.0 <- FALSE
         if(1 %in% fit.treat & is.null(nuis$event.pred.1)) {
             do.event.pred.1 <- TRUE
             nuis$event.pred.1 <- matrix(NA, nrow=n, ncol=k)
-            if(!is.null(treat_c))
-                nuis$event.pred.1_c <- matrix(NA, nrow=nrow(W_c), ncol=k)
+            if(!is.null(W_c))
+                event.pred.1_c <- list() #matrix(NA, nrow=nrow(W_c), ncol=k)
         } else do.event.pred.1 <- FALSE
         if(0 %in% fit.treat & is.null(nuis$cens.pred.0)) {
             do.cens.pred.0 <- TRUE
             nuis$cens.pred.0 <- matrix(NA, nrow=n, ncol=k)
-            if(!is.null(treat_c))
-                nuis$cens.pred.0_c <- matrix(NA, nrow=nrow(W_c), ncol=k)
+            if(!is.null(W_c))
+                # nuis$cens.pred.0_c <- matrix(NA, nrow=nrow(W_c), ncol=k)
+                cens.pred.0_c <- list()
         } else do.cens.pred.0 <- FALSE
         if(1 %in% fit.treat & is.null(nuis$cens.pred.1)) {
             do.cens.pred.1 <- TRUE
             nuis$cens.pred.1 <- matrix(NA, nrow=n, ncol=k)
-            if(!is.null(treat_c))
-                nuis$cens.pred.1_c <- matrix(NA, nrow=nrow(W_c), ncol=k)
+            if(!is.null(W_c))
+                # nuis$cens.pred.1_c <- matrix(NA, nrow=nrow(W_c), ncol=k)
+                cens.pred.1_c <- list()
         } else do.cens.pred.1 <- FALSE
         if(nuis$V > 1) {
             if(nuis$save.nuis.fits) result$surv.fits <- vector(mode='list',length=nuis$V)
@@ -331,7 +333,7 @@ CFsurvival <- function(time, event, treat, confounders, fit.times=sort(unique(ti
                 if(verbose) message(paste("Fold ", v, "..."))
                 train <- nuis$folds != v
                 test <- nuis$folds == v
-                if(is.null(treat_c)){
+                if(is.null(W_c)){
                     surv.fit <- .estimate.conditional.survival(Y=time[train], Delta=event[train], A=treat[train], W=confounders[train,, drop=FALSE], newW=confounders[test,, drop=FALSE], event.SL.library=nuis$event.SL.library, fit.times=nuis$eval.times, fit.treat=fit.treat, cens.SL.library=nuis$cens.SL.library, survSL.control=nuis$survSL.control, survSL.cvControl = nuis$survSL.cvControl, cens.trunc=nuis$cens.trunc, save.fit = nuis$save.nuis.fits, verbose = nuis$verbose)
                     if(do.event.pred.0) nuis$event.pred.0[test,] <- surv.fit$event.pred.0
                     if(do.event.pred.1) nuis$event.pred.1[test,] <- surv.fit$event.pred.1
@@ -350,7 +352,7 @@ CFsurvival <- function(time, event, treat, confounders, fit.times=sort(unique(ti
                     train_w <- nuis$folds.c != v
                     test_w <- nuis$folds.c == v
                     surv.fit <- .estimate.conditional.survival(Y=time[train], Delta=event[train], A=treat[train], W=confounders[train,, drop=FALSE], newW=confounders[test,, drop=FALSE], event.SL.library=nuis$event.SL.library, fit.times=nuis$eval.times, fit.treat=fit.treat, cens.SL.library=nuis$cens.SL.library, survSL.control=nuis$survSL.control, survSL.cvControl = nuis$survSL.cvControl, cens.trunc=nuis$cens.trunc, save.fit = nuis$save.nuis.fits, verbose = nuis$verbose,
-                                                               W_c_test = W_c[test_w,], treat_c_test = treat_c[test_w])
+                                                               W_c_test = W_c)
 
 
                     if(do.event.pred.0) nuis$event.pred.0[test,] <- surv.fit$event.pred.0
@@ -362,14 +364,44 @@ CFsurvival <- function(time, event, treat, confounders, fit.times=sort(unique(ti
                     nuis$event.coef[[v]] <- surv.fit$event.coef
                     nuis$cens.coef[[v]] <- surv.fit$cens.coef
 
-                    if(do.event.pred.0) nuis$event.pred.0_c[test_w,] <- surv.fit$event.pred.0_cohort
-                    if(do.event.pred.1) nuis$event.pred.1_c[test_w,] <- surv.fit$event.pred.1_cohort
-                    if(do.cens.pred.0) nuis$cens.pred.0_c[test_w,] <- surv.fit$cens.pred.0_cohort
-                    if(do.cens.pred.1) nuis$cens.pred.1_c[test_w,] <- surv.fit$cens.pred.1_cohort
+                    if(do.event.pred.0) event.pred.0_c[[v]] <- surv.fit$event.pred.0_cohort
+                    if(do.event.pred.1) event.pred.1_c[[v]] <- surv.fit$event.pred.1_cohort
+                    if(do.cens.pred.0) cens.pred.0_c[[v]] <- surv.fit$cens.pred.0_cohort
+                    if(do.cens.pred.1) cens.pred.1_c[[v]] <- surv.fit$cens.pred.1_cohort
                     # if(nuis$save.nuis.fits) result$surv.fits[[v]] <- surv.fit$surv.fit_cohort
                     # nuis$event.coef[[v]] <- surv.fit$event.coef_cohort
                     # nuis$cens.coef[[v]] <- surv.fit$cens.coef_cohort
 
+                }
+
+            }
+
+            if(!is.null(W_c)){
+                # take the mean of each entry of the cohort and add them to nuisance parameters #
+                nuis$event.pred.0_c <- matrix(NA, nrow=nrow(W_c), ncol=k)
+                nuis$event.pred.1_c <- matrix(NA, nrow=nrow(W_c), ncol=k)
+                nuis$cens.pred.0_c <- matrix(NA, nrow=nrow(W_c), ncol=k)
+                nuis$cens.pred.1_c <- matrix(NA, nrow=nrow(W_c), ncol=k)
+
+                for(i in 1:nrow(W_c)){
+                    for(j in 1:k){
+                        temp.event.pred.0_c <- c()
+                        temp.event.pred.1_c <- c()
+                        temp.cens.pred.0_c <- c()
+                        temp.cens.pred.1_c <- c()
+
+                        for(v in 1:nuis$V) {
+                            temp.event.pred.0_c[v] <- event.pred.0_c[[v]][i,j]
+                            temp.event.pred.1_c[v] <- event.pred.1_c[[v]][i,j]
+                            temp.cens.pred.0_c[v] <- cens.pred.0_c[[v]][i,j]
+                            temp.cens.pred.1_c[v] <- cens.pred.1_c[[v]][i,j]
+                        }
+
+                        nuis$event.pred.0_c[i,j] <- mean(temp.event.pred.0_c)
+                        nuis$event.pred.1_c[i,j] <- mean(temp.event.pred.1_c)
+                        nuis$cens.pred.0_c[i,j] <- mean(temp.cens.pred.0_c)
+                        nuis$cens.pred.1_c[i,j] <- mean(temp.cens.pred.1_c)
+                    }
                 }
 
             }
@@ -692,6 +724,9 @@ CFsurvival.nuisance.options <- function(cross.fit = TRUE, V = ifelse(cross.fit, 
     return(res)
 }
 
+
+
+
 ##### temp modified survival IF estimation #####
 
 .get.survival2 <- function(Y, Delta, A, fit.times, eval.times, S.hats, G.hats, g.hats, pi.RCT.hats, isotonize=TRUE,
@@ -707,7 +742,7 @@ CFsurvival.nuisance.options <- function(cross.fit = TRUE, V = ifelse(cross.fit, 
     if(!is.null(W_c)){
         addons <- nrow(W_c)
 
-        if(!is.null(rx_c) && !is.null(S.hats_c) && !is.null(G.hats_c)){
+        if(!is.null(S.hats_c) && !is.null(G.hats_c)){
             S.hats_c <- S.hats_c[,ord]
             G.hats_c <- G.hats_c[,ord]
 
@@ -752,7 +787,7 @@ CFsurvival.nuisance.options <- function(cross.fit = TRUE, V = ifelse(cross.fit, 
         if.func <- as.numeric(A == 1) * S.hats.t0 * ( -inner.func.1 + inner.func.2) / (g.hats * pi.RCT.hats) + S.hats.t0
 
         if(addons > 0){
-            if(!is.null(rx_c) && !is.null(S.hats_c) && !is.null(G.hats_c))
+            if(!is.null(S.hats_c) && !is.null(G.hats_c))
                 if.func <- c(if.func, S.hats_c[,k])
             else
                 if.func <- c(if.func, rep(mean(S.hats.t0), addons))
