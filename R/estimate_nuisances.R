@@ -1,4 +1,7 @@
-.estimate.conditional.survival <- function(Y, Delta, A, W, newW, fit.times, fit.treat, event.SL.library, cens.SL.library, survSL.control, survSL.cvControl, cens.trunc, verbose, save.fit) {
+.estimate.conditional.survival <- function(Y, Delta, A, W, newW, fit.times, fit.treat, event.SL.library, cens.SL.library, survSL.control, survSL.cvControl, cens.trunc, verbose, save.fit,
+                                           W_c_test = NULL, treat_c_test = NULL) {
+
+
     ret <- list(fit.times=fit.times)
     AW <- cbind(A, W)
     if(0 %in% fit.treat & 1 %in% fit.treat) {
@@ -35,7 +38,84 @@
     }
     ret$event.coef <- fit$event.coef
     ret$cens.coef <- fit$cens.coef
+
+    if(!is.null(W_c_test) && !is.null(treat_c_test)){
+        # message("Adding conditional cohort predictions...")
+        #### cohort if it exists lol ####
+        newAW_c <- rbind(cbind(A=0, W_c_test), cbind(A=1, W_c_test))
+        fit_cohort <- survSuperLearner(time = Y, event = Delta,  X = AW, newX = newAW_c, new.times = fit.times, event.SL.library = event.SL.library, cens.SL.library = cens.SL.library, verbose=verbose, control = survSL.control, cvControl = survSL.cvControl)
+        if(save.fit) ret$surv.fit_cohort <- fit_cohort
+        if(0 %in% fit.treat) {
+            ret$event.pred.0_cohort <- fit_cohort$event.SL.predict[1:nrow(W_c_test),]
+            if(any(ret$event.pred.0_cohort == 0)) ret$event.pred.0_cohort[ret$event.pred.0_cohort == 0] <- min(ret$event.pred.0_cohort[ret$event.pred.0_cohort > 0])
+            ret$cens.pred.0_cohort <- fit_cohort$cens.SL.predict[1:nrow(W_c_test),]
+            ret$cens.pred.0_cohort <- pmax(ret$cens.pred.0_cohort, cens.trunc)
+            if(any(ret$cens.pred.0_cohort == 0)) ret$cens.pred.0_cohort[ret$cens.pred.0_cohort == 0] <- min(ret$cens.pred.0_cohort[ret$cens.pred.0_cohort > 0])
+            if(1 %in% fit.treat) {
+                ret$event.pred.1_cohort <- fit_cohort$event.SL.predict[-(1:nrow(W_c_test)),]
+                if(any(ret$event.pred.1_cohort == 0)) ret$event.pred.1[ret$event.pred.1_cohort == 0] <- min(ret$event.pred.1_cohort[ret$event.pred.1_cohort > 0])
+
+                ret$cens.pred.1_cohort <- fit_cohort$cens.SL.predict[-(1:nrow(W_c_test)),]
+                ret$cens.pred.1_cohort <- pmax(ret$cens.pred.1_cohort, cens.trunc)
+                if(any(ret$cens.pred.1_cohort == 0)) ret$cens.pred.1_cohort[ret$cens.pred.1_cohort == 0] <- min(ret$cens.pred.1_cohort[ret$cens.pred.1_cohort > 0])
+            }
+        } else {
+            ret$event.pred.1_cohort <- fit_cohort$event.SL.predict
+            if(any(ret$event.pred.1_cohort == 0)) ret$event.pred.1_cohort[ret$event.pred.1_cohort == 0] <- min(ret$event.pred.1_cohort[ret$event.pred.1_cohort > 0])
+            ret$cens.pred.1_cohort <- fit_cohort$cens.SL.predict
+            ret$cens.pred.1_cohort <- pmax(ret$cens.pred.1_cohort, cens.trunc)
+            if(any(ret$cens.pred.1_cohort == 0)) ret$cens.pred.1_cohort[ret$cens.pred.1_cohort == 0] <- min(ret$cens.pred.1_cohort[ret$cens.pred.1_cohort > 0])
+        }
+        ret$event.coef_cohort <- fit_cohort$event.coef
+        ret$cens.coef_cohort <- fit_cohort$cens.coef
+
+    }
+
     return(ret)
+
+    # ret <- list(fit.times=fit.times)
+    # AW <- cbind(A, W)
+    # if(0 %in% fit.treat & 1 %in% fit.treat) {
+    #     newAW <- rbind(cbind(A=0, newW), cbind(A=1, newW))
+    # } else {
+    #     newAW <- cbind(A=fit.treat, newW)
+    # }
+    # res <- require(survSuperLearner)
+    # if(!res) stop("Please install the package survSuperLearner via:\n devtools::install_github('tedwestling/survSuperLearner')")
+    # if(is.null(survSL.control)) survSL.control <- list(saveFitLibrary = save.fit)
+    #
+    # fit <- survSuperLearner(time = Y, event = Delta,  X = AW, newX = newAW, new.times = fit.times, event.SL.library = event.SL.library, cens.SL.library = cens.SL.library, verbose=verbose, control = survSL.control, cvControl = survSL.cvControl)
+    # if(save.fit) ret$surv.fit <- fit
+    # if(0 %in% fit.treat) {
+    #     ret$event.pred.0 <- fit$event.SL.predict[1:nrow(newW),]
+    #     if(any(ret$event.pred.0 == 0)) ret$event.pred.0[ret$event.pred.0 == 0] <- min(ret$event.pred.0[ret$event.pred.0 > 0])
+    #     ret$cens.pred.0 <- fit$cens.SL.predict[1:nrow(newW),]
+    #     ret$cens.pred.0 <- pmax(ret$cens.pred.0, cens.trunc)
+    #     if(any(ret$cens.pred.0 == 0)) ret$cens.pred.0[ret$cens.pred.0 == 0] <- min(ret$cens.pred.0[ret$cens.pred.0 > 0])
+    #     if(1 %in% fit.treat) {
+    #         ret$event.pred.1 <- fit$event.SL.predict[-(1:nrow(newW)),]
+    #         if(any(ret$event.pred.1 == 0)) ret$event.pred.1[ret$event.pred.1 == 0] <- min(ret$event.pred.1[ret$event.pred.1 > 0])
+    #
+    #         ret$cens.pred.1 <- fit$cens.SL.predict[-(1:nrow(newW)),]
+    #         ret$cens.pred.1 <- pmax(ret$cens.pred.1, cens.trunc)
+    #         if(any(ret$cens.pred.1 == 0)) ret$cens.pred.1[ret$cens.pred.1 == 0] <- min(ret$cens.pred.1[ret$cens.pred.1 > 0])
+    #     }
+    #
+    #
+    #     temp <- predict(fit, new.times = fit.times,X = rbind(cbind(A=0, W_c_train), cbind(A=1, W_c_train)),newX = rbind(cbind(A=0, W_c_train), cbind(A=1, W_c_train)))
+    #
+    #     temp <- predict(fit, new.times = fit.times)
+    #
+    # } else {
+    #     ret$event.pred.1 <- fit$event.SL.predict
+    #     if(any(ret$event.pred.1 == 0)) ret$event.pred.1[ret$event.pred.1 == 0] <- min(ret$event.pred.1[ret$event.pred.1 > 0])
+    #     ret$cens.pred.1 <- fit$cens.SL.predict
+    #     ret$cens.pred.1 <- pmax(ret$cens.pred.1, cens.trunc)
+    #     if(any(ret$cens.pred.1 == 0)) ret$cens.pred.1[ret$cens.pred.1 == 0] <- min(ret$cens.pred.1[ret$cens.pred.1 > 0])
+    # }
+    # ret$event.coef <- fit$event.coef
+    # ret$cens.coef <- fit$cens.coef
+    # return(ret)
 }
 
 

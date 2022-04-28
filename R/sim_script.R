@@ -47,7 +47,7 @@ simul_DML_causal <- function(N = 500, # n = 250,
                              cens.SL.library = c("survSL.km", "survSL.coxph", "survSL.weibreg", "survSL.expreg"),
                              lambda = 0.1, rho = 2, rateC = 0.05,s = 210793, quants = c(0.75,0.5,0.25),
                              # parameters for interactions #
-                             beta_interactions = NULL
+                             beta_interactions = NULL , include_treat = FALSE
                              ){
 
     library(dplyr)
@@ -135,7 +135,9 @@ simul_DML_causal <- function(N = 500, # n = 250,
                                  prop.SL.library = prop.SL.library,
                                  event.SL.library = event.SL.library,
                                  cens.SL.library = cens.SL.library),
-                             W_c = W_c)
+                             W_c = W_c,
+                             treat_c = ifelse(include_treat, A[RCT == 0], NULL)
+                             )
 
 
 
@@ -222,7 +224,7 @@ simul_DML_causal <- function(N = 500, # n = 250,
 
 
 
-# # ######
+# ######
 # N = 1000
 # covs <- 10
 # set.seed(1)
@@ -249,8 +251,9 @@ simul_DML_causal <- function(N = 500, # n = 250,
 #                              prop.SL.library = c("SL.mean", "SL.glm"),
 #                              event.SL.library = c( "survSL.coxph", "survSL.weibreg"),
 #                              cens.SL.library = c("survSL.coxph", "survSL.expreg"),
-#                              lambda = lambda, rho = rho, rateC = rateC#, beta_interactions = c(1,rep(0,9))
-#                              )
+#                              lambda = lambda, rho = rho, rateC = rateC, include_treat = TRUE
+#  # , beta_interactions = c(1,rep(0,9))
+#                               )
 #
 # sum(ex_simul$dat$RCT)/N
 # sum(ex_simul$dat$A)/N

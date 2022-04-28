@@ -141,7 +141,8 @@
 
 CFsurvival <- function(time, event, treat, confounders, fit.times=sort(unique(time[time > 0 & time < max(time[event == 1])])),
                        fit.treat=c(0,1), nuisance.options = list(), conf.band=TRUE, conf.level=.95,
-                       contrasts = c("surv.diff", "surv.ratio"), verbose=FALSE, W_c = NULL, fit.RCT = c(0,1)) {
+                       contrasts = c("surv.diff", "surv.ratio"), verbose=FALSE, W_c = NULL, fit.RCT = c(0,1),
+                       treat_c = NULL, time_c = NULL, event_c = NULL) {
     .args <- mget(names(formals()), sys.frame(sys.nframe()))
 
     # if(is.null(contrasts)) contrasts <- c("surv.diff", "surv.ratio")
@@ -296,23 +297,32 @@ CFsurvival <- function(time, event, treat, confounders, fit.times=sort(unique(ti
 
     #### ESTIMATE CONDITIONAL SURVIVALS ####
 
+
     if((1 %in% fit.treat & (is.null(nuis$event.pred.1) | is.null(nuis$cens.pred.1))) | (0 %in% fit.treat & (is.null(nuis$event.pred.0) | is.null(nuis$cens.pred.0)))) {
         if(verbose) message("Estimating conditional survivals...")
         if(0 %in% fit.treat & is.null(nuis$event.pred.0)) {
             do.event.pred.0 <- TRUE
             nuis$event.pred.0 <- matrix(NA, nrow=n, ncol=k)
+            if(!is.null(treat_c))
+                nuis$event.pred.0_c <- matrix(NA, nrow=nrow(W_c), ncol=k)
         } else do.event.pred.0 <- FALSE
         if(1 %in% fit.treat & is.null(nuis$event.pred.1)) {
             do.event.pred.1 <- TRUE
             nuis$event.pred.1 <- matrix(NA, nrow=n, ncol=k)
+            if(!is.null(treat_c))
+                nuis$event.pred.1_c <- matrix(NA, nrow=nrow(W_c), ncol=k)
         } else do.event.pred.1 <- FALSE
         if(0 %in% fit.treat & is.null(nuis$cens.pred.0)) {
             do.cens.pred.0 <- TRUE
             nuis$cens.pred.0 <- matrix(NA, nrow=n, ncol=k)
+            if(!is.null(treat_c))
+                nuis$cens.pred.0_c <- matrix(NA, nrow=nrow(W_c), ncol=k)
         } else do.cens.pred.0 <- FALSE
         if(1 %in% fit.treat & is.null(nuis$cens.pred.1)) {
             do.cens.pred.1 <- TRUE
             nuis$cens.pred.1 <- matrix(NA, nrow=n, ncol=k)
+            if(!is.null(treat_c))
+                nuis$cens.pred.1_c <- matrix(NA, nrow=nrow(W_c), ncol=k)
         } else do.cens.pred.1 <- FALSE
         if(nuis$V > 1) {
             if(nuis$save.nuis.fits) result$surv.fits <- vector(mode='list',length=nuis$V)
@@ -321,14 +331,47 @@ CFsurvival <- function(time, event, treat, confounders, fit.times=sort(unique(ti
                 if(verbose) message(paste("Fold ", v, "..."))
                 train <- nuis$folds != v
                 test <- nuis$folds == v
-                surv.fit <- .estimate.conditional.survival(Y=time[train], Delta=event[train], A=treat[train], W=confounders[train,, drop=FALSE], newW=confounders[test,, drop=FALSE], event.SL.library=nuis$event.SL.library, fit.times=nuis$eval.times, fit.treat=fit.treat, cens.SL.library=nuis$cens.SL.library, survSL.control=nuis$survSL.control, survSL.cvControl = nuis$survSL.cvControl, cens.trunc=nuis$cens.trunc, save.fit = nuis$save.nuis.fits, verbose = nuis$verbose)
-                if(do.event.pred.0) nuis$event.pred.0[test,] <- surv.fit$event.pred.0
-                if(do.event.pred.1) nuis$event.pred.1[test,] <- surv.fit$event.pred.1
-                if(do.cens.pred.0) nuis$cens.pred.0[test,] <- surv.fit$cens.pred.0
-                if(do.cens.pred.1) nuis$cens.pred.1[test,] <- surv.fit$cens.pred.1
-                if(nuis$save.nuis.fits) result$surv.fits[[v]] <- surv.fit$surv.fit
-                nuis$event.coef[[v]] <- surv.fit$event.coef
-                nuis$cens.coef[[v]] <- surv.fit$cens.coef
+                if(is.null(treat_c)){
+                    surv.fit <- .estimate.conditional.survival(Y=time[train], Delta=event[train], A=treat[train], W=confounders[train,, drop=FALSE], newW=confounders[test,, drop=FALSE], event.SL.library=nuis$event.SL.library, fit.times=nuis$eval.times, fit.treat=fit.treat, cens.SL.library=nuis$cens.SL.library, survSL.control=nuis$survSL.control, survSL.cvControl = nuis$survSL.cvControl, cens.trunc=nuis$cens.trunc, save.fit = nuis$save.nuis.fits, verbose = nuis$verbose)
+                    if(do.event.pred.0) nuis$event.pred.0[test,] <- surv.fit$event.pred.0
+                    if(do.event.pred.1) nuis$event.pred.1[test,] <- surv.fit$event.pred.1
+                    if(do.cens.pred.0) nuis$cens.pred.0[test,] <- surv.fit$cens.pred.0
+                    if(do.cens.pred.1) nuis$cens.pred.1[test,] <- surv.fit$cens.pred.1
+                    if(nuis$save.nuis.fits) result$surv.fits[[v]] <- surv.fit$surv.fit
+
+                    if(do.event.pred.0) nuis$event.pred.0_c <- NULL
+                    if(do.cens.pred.0) nuis$cens.pred.0_c <- NULL
+
+                    nuis$event.coef[[v]] <- surv.fit$event.coef
+                    nuis$cens.coef[[v]] <- surv.fit$cens.coef
+                }
+                else{
+                    if(verbose) message("Adding conditional cohort predictions...")
+                    train_w <- nuis$folds.c != v
+                    test_w <- nuis$folds.c == v
+                    surv.fit <- .estimate.conditional.survival(Y=time[train], Delta=event[train], A=treat[train], W=confounders[train,, drop=FALSE], newW=confounders[test,, drop=FALSE], event.SL.library=nuis$event.SL.library, fit.times=nuis$eval.times, fit.treat=fit.treat, cens.SL.library=nuis$cens.SL.library, survSL.control=nuis$survSL.control, survSL.cvControl = nuis$survSL.cvControl, cens.trunc=nuis$cens.trunc, save.fit = nuis$save.nuis.fits, verbose = nuis$verbose,
+                                                               W_c_test = W_c[test_w,], treat_c_test = treat_c[test_w])
+
+
+                    if(do.event.pred.0) nuis$event.pred.0[test,] <- surv.fit$event.pred.0
+                    if(do.event.pred.1) nuis$event.pred.1[test,] <- surv.fit$event.pred.1
+                    if(do.cens.pred.0) nuis$cens.pred.0[test,] <- surv.fit$cens.pred.0
+                    if(do.cens.pred.1) nuis$cens.pred.1[test,] <- surv.fit$cens.pred.1
+                    if(nuis$save.nuis.fits) result$surv.fits[[v]] <- surv.fit$surv.fit
+
+                    nuis$event.coef[[v]] <- surv.fit$event.coef
+                    nuis$cens.coef[[v]] <- surv.fit$cens.coef
+
+                    if(do.event.pred.0) nuis$event.pred.0_c[test_w,] <- surv.fit$event.pred.0_cohort
+                    if(do.event.pred.1) nuis$event.pred.1_c[test_w,] <- surv.fit$event.pred.1_cohort
+                    if(do.cens.pred.0) nuis$cens.pred.0_c[test_w,] <- surv.fit$cens.pred.0_cohort
+                    if(do.cens.pred.1) nuis$cens.pred.1_c[test_w,] <- surv.fit$cens.pred.1_cohort
+                    # if(nuis$save.nuis.fits) result$surv.fits[[v]] <- surv.fit$surv.fit_cohort
+                    # nuis$event.coef[[v]] <- surv.fit$event.coef_cohort
+                    # nuis$cens.coef[[v]] <- surv.fit$cens.coef_cohort
+
+                }
+
             }
         } else {
             surv.fit <- .estimate.conditional.survival(Y=time, Delta=event, A=treat, W=confounders, newW=confounders, event.SL.library=nuis$event.SL.library, fit.times=nuis$eval.times, fit.treat=fit.treat, cens.SL.library=nuis$cens.SL.library, survSL.control=nuis$survSL.control, survSL.cvControl = nuis$survSL.cvControl, cens.trunc=nuis$cens.trunc, save.fit = nuis$save.nuis.fits,  verbose = nuis$verbose)
@@ -342,12 +385,67 @@ CFsurvival <- function(time, event, treat, confounders, fit.times=sort(unique(ti
         }
     }
 
+    # if((1 %in% fit.treat & (is.null(nuis$event.pred.1) | is.null(nuis$cens.pred.1))) | (0 %in% fit.treat & (is.null(nuis$event.pred.0) | is.null(nuis$cens.pred.0)))) {
+    #     if(verbose) message("Estimating conditional survivals...")
+    #     if(0 %in% fit.treat & is.null(nuis$event.pred.0)) {
+    #         do.event.pred.0 <- TRUE
+    #         nuis$event.pred.0 <- matrix(NA, nrow=n, ncol=k)
+    #     } else do.event.pred.0 <- FALSE
+    #     if(1 %in% fit.treat & is.null(nuis$event.pred.1)) {
+    #         do.event.pred.1 <- TRUE
+    #         nuis$event.pred.1 <- matrix(NA, nrow=n, ncol=k)
+    #     } else do.event.pred.1 <- FALSE
+    #     if(0 %in% fit.treat & is.null(nuis$cens.pred.0)) {
+    #         do.cens.pred.0 <- TRUE
+    #         nuis$cens.pred.0 <- matrix(NA, nrow=n, ncol=k)
+    #     } else do.cens.pred.0 <- FALSE
+    #     if(1 %in% fit.treat & is.null(nuis$cens.pred.1)) {
+    #         do.cens.pred.1 <- TRUE
+    #         nuis$cens.pred.1 <- matrix(NA, nrow=n, ncol=k)
+    #     } else do.cens.pred.1 <- FALSE
+    #     if(nuis$V > 1) {
+    #         if(nuis$save.nuis.fits) result$surv.fits <- vector(mode='list',length=nuis$V)
+    #         nuis$event.coef <- nuis$cens.coef <- list()
+    #         for(v in 1:nuis$V) {
+    #             if(verbose) message(paste("Fold ", v, "..."))
+    #             train <- nuis$folds != v
+    #             test <- nuis$folds == v
+    #             if(is.null(treat_c))
+    #                 surv.fit <- .estimate.conditional.survival(Y=time[train], Delta=event[train], A=treat[train], W=confounders[train,, drop=FALSE], newW=confounders[test,, drop=FALSE], event.SL.library=nuis$event.SL.library, fit.times=nuis$eval.times, fit.treat=fit.treat, cens.SL.library=nuis$cens.SL.library, survSL.control=nuis$survSL.control, survSL.cvControl = nuis$survSL.cvControl, cens.trunc=nuis$cens.trunc, save.fit = nuis$save.nuis.fits, verbose = nuis$verbose)
+    #             else{
+    #                 train_w <- nuis$folds.c != v
+    #                 test_w <- nuis$folds.c == v
+    #                 surv.fit <- .estimate.conditional.survival(Y=time[train], Delta=event[train], A=treat[train], W=confounders[train,, drop=FALSE], newW=confounders[test,, drop=FALSE], event.SL.library=nuis$event.SL.library, fit.times=nuis$eval.times, fit.treat=fit.treat, cens.SL.library=nuis$cens.SL.library, survSL.control=nuis$survSL.control, survSL.cvControl = nuis$survSL.cvControl, cens.trunc=nuis$cens.trunc, save.fit = nuis$save.nuis.fits, verbose = nuis$verbose,
+    #                                                            W_c_test = W_c[test_w,], treat_c_test = treat_c[test_w])
+    #
+    #             }
+    #             if(do.event.pred.0) nuis$event.pred.0[test,] <- surv.fit$event.pred.0
+    #             if(do.event.pred.1) nuis$event.pred.1[test,] <- surv.fit$event.pred.1
+    #             if(do.cens.pred.0) nuis$cens.pred.0[test,] <- surv.fit$cens.pred.0
+    #             if(do.cens.pred.1) nuis$cens.pred.1[test,] <- surv.fit$cens.pred.1
+    #             if(nuis$save.nuis.fits) result$surv.fits[[v]] <- surv.fit$surv.fit
+    #             nuis$event.coef[[v]] <- surv.fit$event.coef
+    #             nuis$cens.coef[[v]] <- surv.fit$cens.coef
+    #         }
+    #     } else {
+    #         surv.fit <- .estimate.conditional.survival(Y=time, Delta=event, A=treat, W=confounders, newW=confounders, event.SL.library=nuis$event.SL.library, fit.times=nuis$eval.times, fit.treat=fit.treat, cens.SL.library=nuis$cens.SL.library, survSL.control=nuis$survSL.control, survSL.cvControl = nuis$survSL.cvControl, cens.trunc=nuis$cens.trunc, save.fit = nuis$save.nuis.fits,  verbose = nuis$verbose)
+    #         if(do.event.pred.0) nuis$event.pred.0 <- surv.fit$event.pred.0
+    #         if(do.event.pred.1) nuis$event.pred.1 <- surv.fit$event.pred.1
+    #         if(do.cens.pred.0) nuis$cens.pred.0 <- surv.fit$cens.pred.0
+    #         if(do.cens.pred.1) nuis$cens.pred.1 <- surv.fit$cens.pred.1
+    #         if(nuis$save.nuis.fits) result$surv.fit <- surv.fit$surv.fit
+    #         nuis$event.coef <- surv.fit$event.coef
+    #         nuis$cens.coef <- surv.fit$cens.coef
+    #     }
+    # }
+
     #### ESTIMATE CF SURVIVALS ####
     if(verbose) message("Computing counterfactual survivals...")
     if(0 %in% fit.treat) {
         # surv.0 <- .get.survival(Y=time, Delta=event, A=1-treat, fit.times=fit.times, eval.times=nuis$eval.times, S.hats=nuis$event.pred.0, G.hats=nuis$cens.pred.0, g.hats=1-nuis$prop.pred,pi.RCT.hats = nuis$prop.pred.RCT)
         surv.0 <- .get.survival2(Y=time, Delta=event, A=1-treat, fit.times=fit.times, eval.times=nuis$eval.times, S.hats=nuis$event.pred.0, G.hats=nuis$cens.pred.0,
-                                 g.hats=1-nuis$prop.pred,pi.RCT.hats = nuis$prop.pred.RCT, time_c = NULL, rx_c = NULL, W_c = W_c)
+                                 g.hats=1-nuis$prop.pred,pi.RCT.hats = nuis$prop.pred.RCT, time_c = time_c, event_c = event_c, rx_c = treat_c, W_c = W_c,
+                                 S.hats_c = nuis$event.pred.0_c, G.hats_c = nuis$cens.pred.0_c)
 
         surv.df.0 <- data.frame(time=c(0,fit.times), trt=0, surv=c(1, surv.0$surv.iso))
         result$IF.vals.0 <- surv.0$IF.vals
@@ -383,7 +481,8 @@ CFsurvival <- function(time, event, treat, confounders, fit.times=sort(unique(ti
     if(1 %in% fit.treat) {
         # surv.1 <- .get.survival(Y=time, Delta=event, A=treat, fit.times=fit.times, eval.times=nuis$eval.times, S.hats=nuis$event.pred.1, G.hats=nuis$cens.pred.1, g.hats=nuis$prop.pred,pi.RCT.hats = nuis$prop.pred.RCT)
         surv.1 <- .get.survival2(Y=time, Delta=event, A=treat, fit.times=fit.times, eval.times=nuis$eval.times, S.hats=nuis$event.pred.1, G.hats=nuis$cens.pred.1,
-                                 g.hats=nuis$prop.pred,pi.RCT.hats = nuis$prop.pred.RCT, time_c = NULL, rx_c = NULL, W_c = W_c)
+                                 g.hats=nuis$prop.pred,pi.RCT.hats = nuis$prop.pred.RCT, time_c = time_c, event_c = event_c, rx_c = treat_c, W_c = W_c,
+                                 S.hats_c = nuis$event.pred.1_c, G.hats_c = nuis$cens.pred.1_c)
 
         surv.df.1 <- data.frame(time=c(0,fit.times), trt=1, surv=c(1, surv.1$surv.iso))
         result$IF.vals.1 <- surv.1$IF.vals
@@ -477,16 +576,16 @@ CFsurvival <- function(time, event, treat, confounders, fit.times=sort(unique(ti
 #' @param prop.pred Optional \code{n x 1} numeric vector of estimated probabilities that \code{treat = 1} given the confounders. If \code{prop.SL.library = NULL}, then \code{prop.pred} must be specified, otherwise it is ignored.
 #' @return Named list containing the nuisance options.
 CFsurvival.nuisance.options <- function(cross.fit = TRUE, V = ifelse(cross.fit, 10, 1), folds = NULL, eval.times = NULL,
-                                        event.SL.library = lapply(c("survSL.km", "survSL.coxph", "survSL.expreg", "survSL.weibreg", "survSL.loglogreg", "survSL.gam", "survSL.rfsrc"), function(alg) c(alg, "survscreen.glmnet", "survscreen.marg", "All") ),  event.pred.0 = NULL, event.pred.1 = NULL,
-                                        cens.SL.library = lapply(c("survSL.km", "survSL.coxph", "survSL.expreg", "survSL.weibreg", "survSL.loglogreg", "survSL.gam", "survSL.rfsrc"), function(alg) c(alg, "survscreen.glmnet", "survscreen.marg", "All") ),  cens.trunc=0, cens.pred.0 = NULL, cens.pred.1 = NULL,
+                                        event.SL.library = lapply(c("survSL.km", "survSL.coxph", "survSL.expreg", "survSL.weibreg", "survSL.loglogreg", "survSL.gam", "survSL.rfsrc"), function(alg) c(alg, "survscreen.glmnet", "survscreen.marg", "All") ),  event.pred.0 = NULL, event.pred.1 = NULL, event.pred.0_c = NULL, event.pred.1_c = NULL,
+                                        cens.SL.library = lapply(c("survSL.km", "survSL.coxph", "survSL.expreg", "survSL.weibreg", "survSL.loglogreg", "survSL.gam", "survSL.rfsrc"), function(alg) c(alg, "survscreen.glmnet", "survscreen.marg", "All") ),  cens.trunc=0, cens.pred.0 = NULL, cens.pred.1 = NULL, cens.pred.0_c = NULL, cens.pred.1_c = NULL,
                                         survSL.control = list(initWeightAlg = "survSL.rfsrc", verbose=FALSE), survSL.cvControl = list(V = 10), save.nuis.fits = FALSE,
                                         prop.SL.library = lapply(c("SL.mean", "SL.glm", "SL.gam", "SL.earth", "SL.ranger", "SL.xgboost"), function(alg) c(alg, "screen.glmnet", "screen.corRank", "All") ),
                                         prop.RCT.SL.library = lapply(c("SL.mean", "SL.glm", "SL.gam", "SL.earth", "SL.ranger", "SL.xgboost"), function(alg) c(alg, "screen.glmnet", "screen.corRank", "All") ),
                                         prop.trunc=0, prop.pred = NULL,
                                         verbose=FALSE) {
     list(cross.fit = cross.fit, V = V, folds = folds, eval.times = eval.times,
-         event.SL.library = event.SL.library, event.pred.0 = event.pred.0, event.pred.1 = event.pred.1,
-         cens.SL.library = cens.SL.library, cens.trunc=cens.trunc, cens.pred.0 = cens.pred.0, cens.pred.1 = cens.pred.1,
+         event.SL.library = event.SL.library, event.pred.0 = event.pred.0, event.pred.1 = event.pred.1, event.pred.0_c = event.pred.0_c, event.pred.1_c = event.pred.1_c,
+         cens.SL.library = cens.SL.library, cens.trunc=cens.trunc, cens.pred.0 = cens.pred.0, cens.pred.1 = cens.pred.1, cens.pred.0_c = cens.pred.0_c, cens.pred.1_c = cens.pred.1_c,
          survSL.control = survSL.control,
          survSL.cvControl = survSL.cvControl,
          save.nuis.fits = save.nuis.fits,
@@ -595,12 +694,9 @@ CFsurvival.nuisance.options <- function(cross.fit = TRUE, V = ifelse(cross.fit, 
 
 ##### temp modified survival IF estimation #####
 
-.get.survival2 <- function(Y, Delta, A, fit.times, eval.times, S.hats, G.hats, g.hats, pi.RCT.hats, isotonize=TRUE, time_c = NULL, rx_c = NULL, W_c = NULL) {
+.get.survival2 <- function(Y, Delta, A, fit.times, eval.times, S.hats, G.hats, g.hats, pi.RCT.hats, isotonize=TRUE,
+                           time_c = NULL, event_c = NULL, rx_c = NULL, W_c = NULL, S.hats_c = NULL, G.hats_c = NULL) {
 
-    if(!is.null(W_c))
-        addons <- nrow(W_c)
-    else
-        addons <- 0
     fit.times <- fit.times[fit.times > 0]
     n <- length(Y)
     ord <- order(eval.times)
@@ -608,24 +704,59 @@ CFsurvival.nuisance.options <- function(cross.fit = TRUE, V = ifelse(cross.fit, 
     S.hats <- S.hats[,ord]
     G.hats <- G.hats[,ord]
 
+    if(!is.null(W_c)){
+        addons <- nrow(W_c)
+
+        if(!is.null(rx_c) && !is.null(S.hats_c) && !is.null(G.hats_c)){
+            S.hats_c <- S.hats_c[,ord]
+            G.hats_c <- G.hats_c[,ord]
+
+            if(!is.null(time_c) && !is.null(event_c)){
+                # integral values for cohort #
+                int.vals_c <- t(sapply(1:addons, function(i) {
+                    vals <- diff(1/S.hats_c[i,])* 1/ G.hats_c[i,-ncol(G.hats_c)]
+                    if(any(eval.times[-1] > time_c[i])) vals[eval.times[-1] > time_c[i]] <- 0
+                    c(0,cumsum(vals))
+                }))
+                S.hats.Y_c <- sapply(1:addons, function(i) stepfun(eval.times, c(1,S.hats_c[i,]), right = FALSE)(time_c[i]))
+                G.hats.Y_c <- sapply(1:addons, function(i) stepfun(eval.times, c(1,G.hats_c[i,]), right = TRUE)(time_c[i]))
+            }
+        }
+    }
+    else{
+        int.vals_c <- NULL
+        addons <- 0
+    }
+
+    # integral values for RCT #
     int.vals <- t(sapply(1:n, function(i) {
         vals <- diff(1/S.hats[i,])* 1/ G.hats[i,-ncol(G.hats)]
         if(any(eval.times[-1] > Y[i])) vals[eval.times[-1] > Y[i]] <- 0
         c(0,cumsum(vals))
     }))
+
+
     S.hats.Y <- sapply(1:n, function(i) stepfun(eval.times, c(1,S.hats[i,]), right = FALSE)(Y[i]))
     G.hats.Y <- sapply(1:n, function(i) stepfun(eval.times, c(1,G.hats[i,]), right = TRUE)(Y[i]))
     IF.vals <- matrix(NA, nrow=n+addons, ncol=length(fit.times))
     surv <- rep(NA, length(fit.times))
     for(t0 in fit.times) {
+
+        ## first get all the IF for the RCT obs ###
         k <- min(which(eval.times >= t0))
         S.hats.t0 <- S.hats[,k]
         inner.func.1 <- ifelse(Y <= t0 & Delta == 1, 1/(S.hats.Y * G.hats.Y), 0 )
         inner.func.2 <- int.vals[,k]
 
         # if.func <- as.numeric(A == 1) * S.hats.t0 * ( -inner.func.1 + inner.func.2) / (g.hats * pi.RCT.hats) + S.hats.t0
-        if.func <- c(as.numeric(A == 1) * S.hats.t0 * ( -inner.func.1 + inner.func.2) / (g.hats * pi.RCT.hats) + S.hats.t0,
-                     rep(mean(S.hats[,k]), addons))
+        if.func <- as.numeric(A == 1) * S.hats.t0 * ( -inner.func.1 + inner.func.2) / (g.hats * pi.RCT.hats) + S.hats.t0
+
+        if(addons > 0){
+            if(!is.null(rx_c) && !is.null(S.hats_c) && !is.null(G.hats_c))
+                if.func <- c(if.func, S.hats_c[,k])
+            else
+                if.func <- c(if.func, rep(mean(S.hats.t0), addons))
+        }
 
         k1 <- which(fit.times == t0)
         surv[k1] <- mean(if.func)
@@ -640,6 +771,7 @@ CFsurvival.nuisance.options <- function(cross.fit = TRUE, V = ifelse(cross.fit, 
 
     return(res)
 }
+
 
 
 
