@@ -1,56 +1,22 @@
-#' simulation script
+#' simulation script coxph
 #'
 #' This function was used to create the simulation results.
 #' @export
-
-# library(CFsurvival)
-# library(dplyr)
-# rm(list=ls())
-
-# survival function generation #
-simulWeib <- function(N, lambda, rho, beta, rateC, X,s, interactions = NULL, A = NULL, covs_int = NULL)
-{
-    set.seed(s)
-    if(is.null(interactions))
-        interactions = rep(0,ncol(X)-1)
-    # Weibull latent event times
-    v <- runif(n=N)
-    # if(!is.null(dim(covs_int)))
-    Tlat <- (- log(v) / (lambda * exp(X %*% beta + A*covs_int %*% interactions)))^(1 / rho)
-    # else
-    #     Tlat <- (- log(v) / (lambda * exp(X * beta + A*X * interactions )))^(1 / rho)
-
-    # censoring times
-    C <- rexp(n=N, rate=rateC)
-
-    # follow-up times and event indicators
-    time <- pmin(Tlat, C)
-    status <- as.numeric(Tlat <= C)
-
-    # data set
-    data.frame(
-        time=time,
-        status=status,
-        true_time = Tlat
-    )
-}
-
-#####
-simul_DML_causal <- function(N = 500, # n = 250,
-                             X,
-                             beta_R, # = runif(n=covs,-1,1),
-                             beta_A, # = runif(n=covs,-1,1),
-                             beta_T, # = c(runif(n=covs,-1,1),-1),
-                             beta_C,
-                             prop.RCT.SL.library = c("SL.mean", "SL.bayesglm"),
-                             prop.SL.library = c("SL.mean", "SL.bayesglm"),
-                             event.SL.library = c("survSL.coxph", "survSL.weibreg", "survSL.expreg"),
-                             cens.SL.library = c("survSL.coxph", "survSL.weibreg", "survSL.expreg"),
-                             lambda = 0.1, rho = 2, rateC = 0.05,s = 210793, quants = c(0.75,0.5,0.25),
-                             # parameters for interactions #
-                             misspe = "",
-                             beta_interactions = NULL, run_type = "correct", surv_type = "exp",
-                             betaT = 1, lambdaT = 5, betaC = 2, lambdaC = 10, fit.times = seq(0, 10, by=0.1)
+simul_coxph_causal <- function(N = 500, # n = 250,
+                               X,
+                               beta_R, # = runif(n=covs,-1,1),
+                               beta_A, # = runif(n=covs,-1,1),
+                               beta_T, # = c(runif(n=covs,-1,1),-1),
+                               beta_C,
+                               prop.RCT.SL.library = c("SL.mean", "SL.bayesglm"),
+                               prop.SL.library = c("SL.mean", "SL.bayesglm"),
+                               event.SL.library = c("survSL.coxph", "survSL.weibreg", "survSL.expreg"),
+                               cens.SL.library = c("survSL.coxph", "survSL.weibreg", "survSL.expreg"),
+                               lambda = 0.1, rho = 2, rateC = 0.05,s = 210793, quants = c(0.75,0.5,0.25),
+                               # parameters for interactions #
+                               misspe = "",
+                               beta_interactions = NULL, run_type = "correct", surv_type = "exp",
+                               betaT = 1, lambdaT = 5, betaC = 2, lambdaC = 10, fit.times = seq(0, 10, by=0.1)
 ){
 
     library(dplyr)
@@ -100,7 +66,7 @@ simul_DML_causal <- function(N = 500, # n = 250,
     if(surv_type == "weibull"){
         # if(is.null(beta_interactions))
         #     beta_interactions <- rep(0,ncol(X) +1)
-        A*covs_int %*% interactions
+        # A*covs_int %*% interactions
         cens.time <- rweibull(N, shape = betaC, scale = lambdaC * exp(-cbind(X,A) %*% beta_C))
         set.seed(s+1)
         event.time <- rweibull(N, shape = betaT, scale = lambdaT * exp(-cbind(X,A) %*% beta_T))
@@ -146,83 +112,83 @@ simul_DML_causal <- function(N = 500, # n = 250,
 
     ################
     # X_mod <- cbind(sqrt(abs(X[,1])/2)-1/2,exp(X[,2] - X[,1])^2, log((X[,3]+ X[,4])^2), sqrt(abs(X[,4]+X[,5])), (X[,3]+X[,4]+X[,5])^2)
-
     X_mod <- cbind(sqrt(abs(X[,1])/2),exp(X[,2] - X[,1]), log(abs(X[,3]+ X[,4])+1), sqrt(abs(X[,4]+X[,5])), (X[,5])^2)
-
-    if(covs > 5)
-        X_mod <- cbind(X_mod, exp(X[,6:ncol(X)]))
     mod_conf <- X_mod[RCT==1,]
     mod_W_c <- X_mod[RCT ==0,]
 
-    ### adding in the cohort data ###
-    if(run_type == "correct")
-        fit <- CFsurvival(time = obs.time, event = obs.event, treat = rx,
-                          confounders =  confounders, contrasts = NULL,
-                          verbose = FALSE, fit.times = fit.times,
-                          fit.treat = c(0,1),
-                          nuisance.options = list(
-                              prop.RCT.SL.library = prop.RCT.SL.library,
-                              prop.SL.library = prop.SL.library,
-                              event.SL.library = event.SL.library,
-                              cens.SL.library = cens.SL.library, verbose = F),
-                          W_c = W_c
-        )
+    ### marginal --> just a regular cox model ###
+    if(run_type == "correct"){
 
-    if(run_type == "marginal")
-        fit <- CFsurvival(time = obs.time, event = obs.event, treat = rx,
-                          confounders =  rep(1,sum(RCT == 1)), contrasts = NULL,
-                          verbose = FALSE, fit.times = fit.times,
-                          fit.treat = c(0,1),
-                          nuisance.options = list(
-                              prop.RCT.SL.library = prop.RCT.SL.library,
-                              prop.SL.library = prop.SL.library,
-                              event.SL.library = event.SL.library,
-                              cens.SL.library = cens.SL.library, verbose = F),
-                          W_c = rep(1,sum(RCT == 0))
-        )
+        data_use <- as.data.frame(cbind(obs.time, obs.event, rx, confounders))
+        colnames(data_use) <- c("time", "event", "A",paste0("X",1:5))
+        fit <- coxph(Surv(time, event) ~ ., data = data_use)
+        new_data <- as.data.frame(cbind(dat[,-3], A, X))
+        colnames(new_data)[-c(1:3)] <- paste0("X",1:5)
+        predicted_0 <- survfit(fit, newdata = new_data %>% mutate(A = 0))
+        med_pred_0 <- c()
+        for(i in fit.times){
+            med_pred_0 <- c(med_pred_0, median(summary(predicted_0, times = i)$surv))
+        }
+        final_pred_0 <- as_tibble(cbind(fit.times, med_pred_0,out_S0))
+        colnames(final_pred_0) <- c('time','surv','true.surv')
+
+        predicted_1 <- survfit(fit, newdata = new_data  %>% mutate(A = 1))
+        med_pred_1 <- c()
+        for(i in fit.times){
+            med_pred_1 <- c(med_pred_1, median(summary(predicted_1, times = i)$surv))
+        }
+        final_pred_1 <- as_tibble(cbind(fit.times, med_pred_1,out_S1))
+        colnames(final_pred_1) <- c('time','surv','true.surv')
+    }
+
+    if(run_type == "marginal"){
+        data_use <- as.data.frame(cbind(obs.time, obs.event, rx, mod_conf))
+        colnames(data_use) <- c("time", "event", "A",paste0("X",1:5))
+        fit <- coxph(Surv(obs.time, obs.event) ~ rx)
+        new_data <- as.data.frame(cbind(dat[,-3], A, X))
+        colnames(new_data)[-c(1:3)] <- paste0("X",1:5)
+        predicted_0 <- survfit(fit, newdata = new_data %>% mutate(A = 0))
+        med_pred_0 <- c()
+        for(i in fit.times){
+            med_pred_0 <- c(med_pred_0, median(summary(predicted_0, times = i)$surv))
+        }
+        final_pred_0 <- as_tibble(cbind(fit.times, med_pred_0,out_S0))
+        colnames(final_pred_0) <- c('time','surv','true.surv')
+
+        predicted_1 <- survfit(fit, newdata = new_data  %>% mutate(A = 1))
+        med_pred_1 <- c()
+        for(i in fit.times){
+            med_pred_1 <- c(med_pred_1, median(summary(predicted_1, times = i)$surv))
+        }
+        final_pred_1 <- as_tibble(cbind(fit.times, med_pred_1,out_S1))
+        colnames(final_pred_1) <- c('time','surv','true.surv')
+    }
 
     if(run_type == "incorrect"){
-        if(length(misspe) == 1 & misspe == "sampling")
-            fit <- CFsurvival(time = obs.time, event = obs.event, treat = rx,
-                              confounders =  confounders, contrasts = NULL,
-                              verbose = FALSE, fit.times = fit.times,
-                              fit.treat = c(0,1),
-                              nuisance.options = list(
-                                  prop.RCT.SL.library = prop.RCT.SL.library,
-                                  prop.SL.library = prop.SL.library,
-                                  event.SL.library = event.SL.library,
-                                  cens.SL.library = cens.SL.library, verbose = F),
-                              W_c = W_c,misspe = misspe, mod_conf = mod_conf,mod_W_c = mod_W_c
-            )
 
-        if(length(misspe) == 1 & misspe == "survival")
-            fit <- CFsurvival(time = obs.time, event = obs.event, treat = rx,
-                              confounders =  confounders, contrasts = NULL,
-                              verbose = FALSE, fit.times = fit.times,
-                              fit.treat = c(0,1),
-                              nuisance.options = list(
-                                  prop.RCT.SL.library = prop.RCT.SL.library,
-                                  prop.SL.library = prop.SL.library,
-                                  event.SL.library = event.SL.library,
-                                  cens.SL.library = cens.SL.library, verbose = F),
-                              W_c = W_c,misspe = misspe, mod_conf = mod_conf,mod_W_c = mod_W_c
-            )
+        data_use <- as.data.frame(cbind(obs.time, obs.event, rx, mod_conf))
+        colnames(data_use) <- c("time", "event","A",paste0("X",1:5))
+        fit <- coxph(Surv(time, event) ~ ., data = data_use)
+        new_data <- as.data.frame(cbind(dat[,-3], A, X_mod))
+        colnames(new_data)[-c(1:3)] <- paste0("X",1:5)
+        predicted_0 <- survfit(fit, newdata = new_data %>% mutate(A = 0))
+        med_pred_0 <- c()
+        for(i in fit.times){
+            med_pred_0 <- c(med_pred_0, median(summary(predicted_0, times = i)$surv))
+        }
+        final_pred_0 <- as_tibble(cbind(fit.times, med_pred_0,out_S0))
+        colnames(final_pred_0) <- c('time','surv','true.surv')
 
-        if(sum(c("sampling", "survival") %in% misspe) == 2)
-            fit <- CFsurvival(time = obs.time, event = obs.event, treat = rx,
-                              confounders =  mod_conf, contrasts = NULL,
-                              verbose = FALSE, fit.times = fit.times,
-                              fit.treat = c(0,1),
-                              nuisance.options = list(
-                                  prop.RCT.SL.library = prop.RCT.SL.library,
-                                  prop.SL.library = prop.SL.library,
-                                  event.SL.library = event.SL.library,
-                                  cens.SL.library = cens.SL.library, verbose = F),
-                              W_c = mod_W_c
-            )
+        predicted_1 <- survfit(fit, newdata = new_data  %>% mutate(A = 1))
+        med_pred_1 <- c()
+        for(i in fit.times){
+            med_pred_1 <- c(med_pred_1, median(summary(predicted_1, times = i)$surv))
+        }
+        final_pred_1 <- as_tibble(cbind(fit.times, med_pred_1,out_S1))
+        colnames(final_pred_1) <- c('time','surv','true.surv')
 
     }
-    fit$surv.df$true.surv <- c(out_S0[1:(nrow(fit$surv.df)/2)], out_S1[1:(nrow(fit$surv.df)/2)])
+
     ###### metrics #####
 
     ### Overall ###
@@ -230,25 +196,25 @@ simul_DML_causal <- function(N = 500, # n = 250,
     ### bias survival ###
 
     Delta_0_bias <- function(t){
-        temp <- fit$surv.df %>% filter(trt == 0, time <= t)
+        temp <- final_pred_0 %>% filter(time <= t)
         sum(abs(temp$surv - temp$true.surv))
     }
     Delta_0_bias_out <- sapply(X = fit.times, FUN = Delta_0_bias)
     Delta_1_bias <- function(t){
-        temp <- fit$surv.df %>% filter(trt == 1, time <= t)
+        temp <- final_pred_1 %>% filter(time <= t)
         sum(abs(temp$surv - temp$true.surv))
     }
     Delta_1_bias_out <- sapply(X = fit.times, FUN = Delta_1_bias)
 
     ### MSE survival ###
     Delta_0_MSE <- function(t){
-        temp <- fit$surv.df %>% filter(trt == 0, time <= t)
+        temp <- final_pred_0 %>% filter(time <= t)
         sum(abs(temp$surv - temp$true.surv)^2)
     }
     Delta_0_MSE_out <- sapply(X = fit.times, FUN = Delta_0_MSE)
 
     Delta_1_MSE <- function(t){
-        temp <- fit$surv.df %>% filter(trt == 1, time <= t)
+        temp <- final_pred_1 %>% filter(time <= t)
         sum(abs(temp$surv - temp$true.surv)^2)
     }
     Delta_1_MSE_out <- sapply(X = fit.times, FUN = Delta_1_MSE)
@@ -267,12 +233,12 @@ simul_DML_causal <- function(N = 500, # n = 250,
 
     # # no treatment #
     quant_bias_0 <- quantile_bias(quants = quants, time_surv = fit.times, survival = out_S0) -
-        quantile_bias(quants = quants, time_surv = fit.times, survival = fit$surv.df$surv[fit$surv.df$trt == 0])
+        quantile_bias(quants = quants, time_surv = fit.times, survival = final_pred_0$surv) #fit$surv.df$surv[fit$surv.df$trt == 0]
     names(quant_bias_0) <- quants
 
     # # treatment #
     quant_bias_1 <- quantile_bias(quants = quants, time_surv = fit.times, survival = out_S1) -
-        quantile_bias(quants = quants, time_surv = fit.times, survival = fit$surv.df$surv[fit$surv.df$trt == 1])
+        quantile_bias(quants = quants, time_surv = fit.times, survival = final_pred_1$surv)
     names(quant_bias_1) <- quants
     #
     # ### Quantile MSE ###
@@ -283,6 +249,7 @@ simul_DML_causal <- function(N = 500, # n = 250,
     ####################
     # merge data #
     dat <- cbind(cbind(cbind(dat,X),A),RCT,X_mod)
+
 
     return(list(
         "fit" = fit,
@@ -305,73 +272,65 @@ simul_DML_causal <- function(N = 500, # n = 250,
 }
 
 
-# rm(list=ls())
+
+# library(survival)
 # N = 1000
-# covs <- c(5)
+# vars <- 1
 # lambda = 0.1
 # rho = 2
-# rateC = 0.1
-# run <- 23
+# rateC = 0.05
+# runs <- 100
+# covs <- 5
 #
-# set.seed(run*covs)
+# X <- matrix(rnorm(n = N*covs,0,1), nrow = N, ncol = covs)
+# beta_R = rep(0.4, covs)
+# beta_A = rep(0.4, covs)
+# beta_T = c(rep(0.4, covs),-0.75)
+# beta_C = c(rep(0.4, covs),-1/5)
+#
+#
+# N = N
+# X = X
+# beta_R = beta_R
+# beta_A = beta_A
+# beta_T = beta_T
+# lambda = lambda
+# rho = rho
+# rateC = rateC
+# s = 21071993 + 12
+# beta_interactions = NULL
+# surv_type = "exp"
+# run_type = "incorrect"
+# betaT = 1
+# lambdaT = 5
+# betaC = 2
+# lambdaC = 10
+# misspe = c("survival")
+#
+# prop.RCT.SL.library = c("SL.glm","SL.bayesglm", "SL.glmnet", "SL.rpart")
+# prop.SL.library = c("SL.mean")
+# event.SL.library = c( "survSL.coxph", "survSL.weibreg", "survSL.expreg")
+# cens.SL.library = c("survSL.coxph", "survSL.weibreg", "survSL.expreg")
+#
+# ex_simul <- simul_coxph_causal(N = N, # n = n,
+#                                X = X,
+#                                beta_R = beta_R,
+#                                beta_A = beta_A,
+#                                beta_T = beta_T,
+#                                beta_C = beta_C,
+#                                prop.RCT.SL.library = prop.RCT.SL.library,
+#                                prop.SL.library = prop.SL.library,
+#                                event.SL.library = event.SL.library,
+#                                cens.SL.library =cens.SL.library,
+#                                lambda = lambda, rho = rho, rateC = rateC, s = s,
+#                                run_type = "incorrect",
+#                                surv_type = "exp",
+#                                misspe = misspe
+# )
+#
+# ex_simul$Delta_0_bias[80]
+# ex_simul$Delta_1_bias[80]
 
-N = 1000
-vars <- 1
-lambda = 0.1
-rho = 2
-rateC = 0.05
-runs <- 100
-covs <- 5
-
-X <- matrix(rnorm(n = N*covs,0,1), nrow = N, ncol = covs)
-beta_R = rep(0.3, covs)
-beta_A = rep(0.3, covs)
-beta_T = c(rep(0.3, covs),-0.5)
-beta_C = c(rep(0.3, covs),-1/5)
-
-
-N = N
-X = X
-beta_R = beta_R
-beta_A = beta_A
-beta_T = beta_T
-lambda = lambda
-rho = rho
-rateC = rateC
-s = 21071993 + 1
-beta_interactions = NULL
-surv_type = "exp"
-run_type = "incorrect"
-betaT = 1
-lambdaT = 5
-betaC = 2
-lambdaC = 10
-misspe = c("sampling")
-
-prop.RCT.SL.library = c("SL.glm", "SL.mean","SL.rpart","SL.gbm")
-prop.SL.library = c("SL.mean")
-event.SL.library = c( "survSL.coxph", "survSL.weibreg", "survSL.expreg")
-cens.SL.library = c("survSL.coxph", "survSL.weibreg", "survSL.expreg")
-
-ex_simul <- simul_DML_causal(N = N, # n = n,
-                             X = X,
-                             beta_R = beta_R,
-                             beta_A = beta_A,
-                             beta_T = beta_T,
-                             beta_C = beta_C,
-                             prop.RCT.SL.library = prop.RCT.SL.library,
-                             prop.SL.library = prop.SL.library,
-                             event.SL.library = event.SL.library,
-                             cens.SL.library =cens.SL.library,
-                             lambda = lambda, rho = rho, rateC = rateC, s = s,
-                             run_type = "incorrect",
-                             surv_type = "exp",
-                             misspe = misspe
-)
-
-ex_simul$Delta_0_bias[80]
-ex_simul$Delta_1_bias[80]
-summary(ex_simul$fit$nuisance$prop.pred.RCT)
 
 
 # library(ggplot2)

@@ -15,5 +15,6 @@ Suggests:
     randomForestSRC,
     SuperLearner,
     ggplot2,
-    dplyr
+    dplyr,
+    survival
 RoxygenNote: 7.1.1

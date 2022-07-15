@@ -142,7 +142,7 @@
 CFsurvival <- function(time, event, treat, confounders, fit.times=sort(unique(time[time > 0 & time < max(time[event == 1])])),
                        fit.treat=c(0,1), nuisance.options = list(), conf.band=TRUE, conf.level=.95,
                        contrasts = c("surv.diff", "surv.ratio"), verbose=FALSE, W_c = NULL, fit.RCT = c(0,1),
-                       treat_c = NULL, time_c = NULL, event_c = NULL) {
+                       treat_c = NULL, time_c = NULL, event_c = NULL, misspe = "", mod_conf = NULL, mod_W_c = NULL) {
     .args <- mget(names(formals()), sys.frame(sys.nframe()))
 
     # if(is.null(contrasts)) contrasts <- c("surv.diff", "surv.ratio")
@@ -198,6 +198,11 @@ CFsurvival <- function(time, event, treat, confounders, fit.times=sort(unique(ti
             colnames(W_c) <- colnames(confounders)
             nuis$folds.c <- sample(rep(1:nuis$V, length = nrow(W_c)))
         }
+
+        if(!is.null(mod_conf))
+            mod_conf <- as.data.frame(mod_conf)
+        if(!is.null(mod_W_c))
+            mod_W_c <- as.data.frame(mod_W_c)
     }
 
     if(is.null(nuis$verbose)) nuis$verbose <- FALSE
@@ -226,6 +231,7 @@ CFsurvival <- function(time, event, treat, confounders, fit.times=sort(unique(ti
 
 
     #### ESTIMATE RCT / COHORT PROPENSITY ####
+    # add for marginal just sum(RCT)/N #
 
     if(!is.null(W_c)) {
         if(verbose) message("Estimating RCT propensities...")
@@ -238,16 +244,34 @@ CFsurvival <- function(time, event, treat, confounders, fit.times=sort(unique(ti
                 test <- nuis$folds == v
                 train_w <- nuis$folds.c != v
                 test_w <- nuis$folds.c == v
-                prop.fit.RCT <- .estimate.RCT_cohort.propensity(A=c(rep(1,sum(train)), rep(0, sum(train_w)) ),
-                                                                W=rbind(confounders[train,,drop=FALSE],
-                                                                        W_c[train_w,,drop=FALSE]),
-                                                                newW=rbind(confounders[test,, drop=FALSE],
-                                                                           W_c[test_w,,drop=FALSE]),
-                                                                SL.library=nuis$prop.RCT.SL.library,
-                                                                fit.treat=fit.treat,
-                                                                prop.trunc=nuis$prop.trunc,
-                                                                save.fit = nuis$save.nuis.fits,
-                                                                verbose = nuis$verbose)
+                if("sampling" %in% misspe){
+                    print("Sampling misspecification selected")
+                    prop.fit.RCT <- .estimate.RCT_cohort.propensity(A=c(rep(1,sum(train)), rep(0, sum(train_w)) ),
+                                                                    W=rbind(mod_conf[train,,drop=FALSE],
+                                                                            mod_W_c[train_w,,drop=FALSE]),
+                                                                    newW=rbind(mod_conf[test,, drop=FALSE],
+                                                                               mod_W_c[test_w,,drop=FALSE]),
+                                                                    # W=log(sqrt(rbind(confounders[train,,drop=FALSE],
+                                                                    #                  W_c[train_w,,drop=FALSE]))/2)-1/2,
+                                                                    # newW=log(sqrt(rbind(confounders[test,, drop=FALSE],
+                                                                    #                     W_c[test_w,,drop=FALSE]))/2)-1/2,
+                                                                    SL.library=nuis$prop.RCT.SL.library,
+                                                                    fit.treat=fit.treat,
+                                                                    prop.trunc=nuis$prop.trunc,
+                                                                    save.fit = nuis$save.nuis.fits,
+                                                                    verbose = nuis$verbose)
+                }
+                else
+                    prop.fit.RCT <- .estimate.RCT_cohort.propensity(A=c(rep(1,sum(train)), rep(0, sum(train_w)) ),
+                                                                    W=rbind(confounders[train,,drop=FALSE],
+                                                                            W_c[train_w,,drop=FALSE]),
+                                                                    newW=rbind(confounders[test,, drop=FALSE],
+                                                                               W_c[test_w,,drop=FALSE]),
+                                                                    SL.library=nuis$prop.RCT.SL.library,
+                                                                    fit.treat=fit.treat,
+                                                                    prop.trunc=nuis$prop.trunc,
+                                                                    save.fit = nuis$save.nuis.fits,
+                                                                    verbose = nuis$verbose)
                 nuis$prop.pred.RCT[test] <- prop.fit.RCT$prop.pred[1:sum(test)]
                 if(nuis$save.nuis.fits) result$prop.fits.RCT[[v]] <- prop.fit$prop.fit.RCT
             }
@@ -351,8 +375,16 @@ CFsurvival <- function(time, event, treat, confounders, fit.times=sort(unique(ti
                     if(verbose) message("Adding conditional cohort predictions...")
                     train_w <- nuis$folds.c != v
                     test_w <- nuis$folds.c == v
-                    surv.fit <- .estimate.conditional.survival(Y=time[train], Delta=event[train], A=treat[train], W=confounders[train,, drop=FALSE], newW=confounders[test,, drop=FALSE], event.SL.library=nuis$event.SL.library, fit.times=nuis$eval.times, fit.treat=fit.treat, cens.SL.library=nuis$cens.SL.library, survSL.control=nuis$survSL.control, survSL.cvControl = nuis$survSL.cvControl, cens.trunc=nuis$cens.trunc, save.fit = nuis$save.nuis.fits, verbose = nuis$verbose,
-                                                               W_c_test = W_c)
+                    if("survival" %in% misspe){
+                        print("Survival misspecification selected")
+                        surv.fit <- .estimate.conditional.survival(Y=time[train], Delta=event[train], A=treat[train], W=mod_conf[train,, drop=FALSE], newW=mod_conf[test,, drop=FALSE], event.SL.library=nuis$event.SL.library, fit.times=nuis$eval.times, fit.treat=fit.treat, cens.SL.library=nuis$cens.SL.library, survSL.control=nuis$survSL.control, survSL.cvControl = nuis$survSL.cvControl, cens.trunc=nuis$cens.trunc, save.fit = nuis$save.nuis.fits, verbose = nuis$verbose,
+                                                                   W_c_test = mod_W_c)
+                        # surv.fit <- .estimate.conditional.survival(Y=time[train], Delta=event[train], A=treat[train], W=log(sqrt(confounders[train,, drop=FALSE])/2)-1/2, newW=log(sqrt(confounders[test,, drop=FALSE])/2)-1/2, event.SL.library=nuis$event.SL.library, fit.times=nuis$eval.times, fit.treat=fit.treat, cens.SL.library=nuis$cens.SL.library, survSL.control=nuis$survSL.control, survSL.cvControl = nuis$survSL.cvControl, cens.trunc=nuis$cens.trunc, save.fit = nuis$save.nuis.fits, verbose = nuis$verbose,
+                        #                                            W_c_test = log(sqrt(W_c)/2)-1/2)
+                    }
+                    else
+                        surv.fit <- .estimate.conditional.survival(Y=time[train], Delta=event[train], A=treat[train], W=confounders[train,, drop=FALSE], newW=confounders[test,, drop=FALSE], event.SL.library=nuis$event.SL.library, fit.times=nuis$eval.times, fit.treat=fit.treat, cens.SL.library=nuis$cens.SL.library, survSL.control=nuis$survSL.control, survSL.cvControl = nuis$survSL.cvControl, cens.trunc=nuis$cens.trunc, save.fit = nuis$save.nuis.fits, verbose = nuis$verbose,
+                                                                   W_c_test = W_c)
 
 
                     if(do.event.pred.0) nuis$event.pred.0[test,] <- surv.fit$event.pred.0
@@ -474,10 +506,12 @@ CFsurvival <- function(time, event, treat, confounders, fit.times=sort(unique(ti
     #### ESTIMATE CF SURVIVALS ####
     if(verbose) message("Computing counterfactual survivals...")
     if(0 %in% fit.treat) {
-        # surv.0 <- .get.survival(Y=time, Delta=event, A=1-treat, fit.times=fit.times, eval.times=nuis$eval.times, S.hats=nuis$event.pred.0, G.hats=nuis$cens.pred.0, g.hats=1-nuis$prop.pred,pi.RCT.hats = nuis$prop.pred.RCT)
-        surv.0 <- .get.survival2(Y=time, Delta=event, A=1-treat, fit.times=fit.times, eval.times=nuis$eval.times, S.hats=nuis$event.pred.0, G.hats=nuis$cens.pred.0,
-                                 g.hats=1-nuis$prop.pred,pi.RCT.hats = nuis$prop.pred.RCT, time_c = time_c, event_c = event_c, rx_c = treat_c, W_c = W_c,
-                                 S.hats_c = nuis$event.pred.0_c, G.hats_c = nuis$cens.pred.0_c)
+        if(is.null(W_c))
+            surv.0 <- .get.survival(Y=time, Delta=event, A=1-treat, fit.times=fit.times, eval.times=nuis$eval.times, S.hats=nuis$event.pred.0, G.hats=nuis$cens.pred.0, g.hats=1-nuis$prop.pred)
+        else
+            surv.0 <- .get.survival2(Y=time, Delta=event, A=1-treat, fit.times=fit.times, eval.times=nuis$eval.times, S.hats=nuis$event.pred.0, G.hats=nuis$cens.pred.0,
+                                     g.hats=1-nuis$prop.pred,pi.RCT.hats = nuis$prop.pred.RCT, time_c = time_c, event_c = event_c, rx_c = treat_c, W_c = W_c,
+                                     S.hats_c = nuis$event.pred.0_c, G.hats_c = nuis$cens.pred.0_c)
 
         surv.df.0 <- data.frame(time=c(0,fit.times), trt=0, surv=c(1, surv.0$surv.iso))
         result$IF.vals.0 <- surv.0$IF.vals
@@ -511,10 +545,12 @@ CFsurvival <- function(time, event, treat, confounders, fit.times=sort(unique(ti
     }
 
     if(1 %in% fit.treat) {
-        # surv.1 <- .get.survival(Y=time, Delta=event, A=treat, fit.times=fit.times, eval.times=nuis$eval.times, S.hats=nuis$event.pred.1, G.hats=nuis$cens.pred.1, g.hats=nuis$prop.pred,pi.RCT.hats = nuis$prop.pred.RCT)
-        surv.1 <- .get.survival2(Y=time, Delta=event, A=treat, fit.times=fit.times, eval.times=nuis$eval.times, S.hats=nuis$event.pred.1, G.hats=nuis$cens.pred.1,
-                                 g.hats=nuis$prop.pred,pi.RCT.hats = nuis$prop.pred.RCT, time_c = time_c, event_c = event_c, rx_c = treat_c, W_c = W_c,
-                                 S.hats_c = nuis$event.pred.1_c, G.hats_c = nuis$cens.pred.1_c)
+        if(is.null(W_c))
+            surv.1 <- .get.survival(Y=time, Delta=event, A=treat, fit.times=fit.times, eval.times=nuis$eval.times, S.hats=nuis$event.pred.1, G.hats=nuis$cens.pred.1, g.hats=nuis$prop.pred)
+        else
+            surv.1 <- .get.survival2(Y=time, Delta=event, A=treat, fit.times=fit.times, eval.times=nuis$eval.times, S.hats=nuis$event.pred.1, G.hats=nuis$cens.pred.1,
+                                     g.hats=nuis$prop.pred,pi.RCT.hats = nuis$prop.pred.RCT, time_c = time_c, event_c = event_c, rx_c = treat_c, W_c = W_c,
+                                     S.hats_c = nuis$event.pred.1_c, G.hats_c = nuis$cens.pred.1_c)
 
         surv.df.1 <- data.frame(time=c(0,fit.times), trt=1, surv=c(1, surv.1$surv.iso))
         result$IF.vals.1 <- surv.1$IF.vals
@@ -614,7 +650,7 @@ CFsurvival.nuisance.options <- function(cross.fit = TRUE, V = ifelse(cross.fit, 
                                         prop.SL.library = lapply(c("SL.mean", "SL.glm", "SL.gam", "SL.earth", "SL.ranger", "SL.xgboost"), function(alg) c(alg, "screen.glmnet", "screen.corRank", "All") ),
                                         prop.RCT.SL.library = lapply(c("SL.mean", "SL.glm", "SL.gam", "SL.earth", "SL.ranger", "SL.xgboost"), function(alg) c(alg, "screen.glmnet", "screen.corRank", "All") ),
                                         prop.trunc=0, prop.pred = NULL,
-                                        verbose=FALSE) {
+                                        verbose=NULL) {
     list(cross.fit = cross.fit, V = V, folds = folds, eval.times = eval.times,
          event.SL.library = event.SL.library, event.pred.0 = event.pred.0, event.pred.1 = event.pred.1, event.pred.0_c = event.pred.0_c, event.pred.1_c = event.pred.1_c,
          cens.SL.library = cens.SL.library, cens.trunc=cens.trunc, cens.pred.0 = cens.pred.0, cens.pred.1 = cens.pred.1, cens.pred.0_c = cens.pred.0_c, cens.pred.1_c = cens.pred.1_c,
@@ -624,7 +660,7 @@ CFsurvival.nuisance.options <- function(cross.fit = TRUE, V = ifelse(cross.fit, 
          prop.SL.library = prop.SL.library,  prop.RCT.SL.library = prop.RCT.SL.library, prop.trunc=prop.trunc, prop.pred = prop.pred, verbose=verbose)
 }
 
-# CFsurvival.nuisance.options <- function(cross.fit = TRUE, V = ifelse(cross.fit, 10, 1), folds = NULL, eval.times = NULL,
+# .nuisance.options <- function(cross.fit = TRUE, V = ifelse(cross.fit, 10, 1), folds = NULL, eval.times = NULL,
 #                                         event.SL.library = lapply(c("survSL.km", "survSL.coxph", "survSL.expreg", "survSL.weibreg", "survSL.loglogreg", "survSL.gam", "survSL.rfsrc"), function(alg) c(alg, "survscreen.glmnet", "survscreen.marg", "All") ),  event.pred.0 = NULL, event.pred.1 = NULL,
 #                                         cens.SL.library = lapply(c("survSL.km", "survSL.coxph", "survSL.expreg", "survSL.weibreg", "survSL.loglogreg", "survSL.gam", "survSL.rfsrc"), function(alg) c(alg, "survscreen.glmnet", "survscreen.marg", "All") ),  cens.trunc=0, cens.pred.0 = NULL, cens.pred.1 = NULL,
 #                                         survSL.control = list(initWeightAlg = "survSL.rfsrc", verbose=FALSE), survSL.cvControl = list(V = 10), save.nuis.fits = FALSE,
@@ -685,7 +721,8 @@ CFsurvival.nuisance.options <- function(cross.fit = TRUE, V = ifelse(cross.fit, 
     }
 }
 
-.get.survival <- function(Y, Delta, A, fit.times, eval.times, S.hats, G.hats, g.hats, pi.RCT.hats, isotonize=TRUE) {
+
+.get.survival <- function(Y, Delta, A, fit.times, eval.times, S.hats, G.hats, g.hats, isotonize=TRUE) {
     fit.times <- fit.times[fit.times > 0]
     n <- length(Y)
     ord <- order(eval.times)
@@ -707,10 +744,7 @@ CFsurvival.nuisance.options <- function(cross.fit = TRUE, V = ifelse(cross.fit, 
         S.hats.t0 <- S.hats[,k]
         inner.func.1 <- ifelse(Y <= t0 & Delta == 1, 1/(S.hats.Y * G.hats.Y), 0 )
         inner.func.2 <- int.vals[,k]
-
-        # if.func <- as.numeric(A == 1) * S.hats.t0 * ( -inner.func.1 + inner.func.2) / (g.hats * pi.RCT.hats) + S.hats.t0
-        if.func <- as.numeric(A == 1) * S.hats.t0 * ( -inner.func.1 + inner.func.2) * (1 - pi.RCT.hats) / (g.hats * pi.RCT.hats) + S.hats.t0
-
+        if.func <- as.numeric(A == 1) * S.hats.t0 * ( -inner.func.1 + inner.func.2) / g.hats + S.hats.t0
         k1 <- which(fit.times == t0)
         surv[k1] <- mean(if.func)
         IF.vals[,k1] <- if.func - surv[k1]
@@ -723,6 +757,46 @@ CFsurvival.nuisance.options <- function(cross.fit = TRUE, V = ifelse(cross.fit, 
 
     return(res)
 }
+
+
+# .get.survival <- function(Y, Delta, A, fit.times, eval.times, S.hats, G.hats, g.hats, pi.RCT.hats, isotonize=TRUE) {
+#     fit.times <- fit.times[fit.times > 0]
+#     n <- length(Y)
+#     ord <- order(eval.times)
+#     eval.times <- eval.times[ord]
+#     S.hats <- S.hats[,ord]
+#     G.hats <- G.hats[,ord]
+#
+#     int.vals <- t(sapply(1:n, function(i) {
+#         vals <- diff(1/S.hats[i,])* 1/ G.hats[i,-ncol(G.hats)]
+#         if(any(eval.times[-1] > Y[i])) vals[eval.times[-1] > Y[i]] <- 0
+#         c(0,cumsum(vals))
+#     }))
+#     S.hats.Y <- sapply(1:n, function(i) stepfun(eval.times, c(1,S.hats[i,]), right = FALSE)(Y[i]))
+#     G.hats.Y <- sapply(1:n, function(i) stepfun(eval.times, c(1,G.hats[i,]), right = TRUE)(Y[i]))
+#     IF.vals <- matrix(NA, nrow=n, ncol=length(fit.times))
+#     surv <- rep(NA, length(fit.times))
+#     for(t0 in fit.times) {
+#         k <- min(which(eval.times >= t0))
+#         S.hats.t0 <- S.hats[,k]
+#         inner.func.1 <- ifelse(Y <= t0 & Delta == 1, 1/(S.hats.Y * G.hats.Y), 0 )
+#         inner.func.2 <- int.vals[,k]
+#
+#         if.func <- as.numeric(A == 1) * S.hats.t0 * ( -inner.func.1 + inner.func.2) / (g.hats) + S.hats.t0
+#         # if.func <- as.numeric(A == 1) * S.hats.t0 * ( -inner.func.1 + inner.func.2) * (1 - pi.RCT.hats) / (g.hats * pi.RCT.hats) + S.hats.t0
+#
+#         k1 <- which(fit.times == t0)
+#         surv[k1] <- mean(if.func)
+#         IF.vals[,k1] <- if.func - surv[k1]
+#     }
+#     res <- list(times=fit.times, surv=pmin(1,pmax(0,surv)), IF.vals=IF.vals)
+#     if(isotonize) {
+#         res$surv.iso <- NA
+#         res$surv.iso[!is.na(res$surv)] <- 1 - isoreg(res$times[!is.na(res$surv)], 1-res$surv[!is.na(res$surv)])$yf
+#     }
+#
+#     return(res)
+# }
 
 
 
@@ -783,8 +857,8 @@ CFsurvival.nuisance.options <- function(cross.fit = TRUE, V = ifelse(cross.fit, 
         inner.func.1 <- ifelse(Y <= t0 & Delta == 1, 1/(S.hats.Y * G.hats.Y), 0 )
         inner.func.2 <- int.vals[,k]
 
-        # if.func <- as.numeric(A == 1) * S.hats.t0 * ( -inner.func.1 + inner.func.2) / (g.hats * pi.RCT.hats) + S.hats.t0
         if.func <- as.numeric(A == 1) * S.hats.t0 * ( -inner.func.1 + inner.func.2) / (g.hats * pi.RCT.hats) + S.hats.t0
+        # if.func <- as.numeric(A == 1) * S.hats.t0 * ( -inner.func.1 + inner.func.2) * (1 - pi.RCT.hats) / (g.hats * pi.RCT.hats) + S.hats.t0
 
         if(addons > 0){
             if(!is.null(S.hats_c) && !is.null(G.hats_c))
