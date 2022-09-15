@@ -53,7 +53,7 @@
             if(any(ret$cens.pred.0_cohort == 0)) ret$cens.pred.0_cohort[ret$cens.pred.0_cohort == 0] <- min(ret$cens.pred.0_cohort[ret$cens.pred.0_cohort > 0])
             if(1 %in% fit.treat) {
                 ret$event.pred.1_cohort <- fit_cohort$event.SL.predict[-(1:nrow(W_c_test)),]
-                if(any(ret$event.pred.1_cohort == 0)) ret$event.pred.1[ret$event.pred.1_cohort == 0] <- min(ret$event.pred.1_cohort[ret$event.pred.1_cohort > 0])
+                if(any(ret$event.pred.1_cohort == 0)) ret$event.pred.1_cohort[ret$event.pred.1_cohort == 0] <- min(ret$event.pred.1_cohort[ret$event.pred.1_cohort > 0])
 
                 ret$cens.pred.1_cohort <- fit_cohort$cens.SL.predict[-(1:nrow(W_c_test)),]
                 ret$cens.pred.1_cohort <- pmax(ret$cens.pred.1_cohort, cens.trunc)

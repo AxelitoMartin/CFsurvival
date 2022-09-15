@@ -959,6 +959,10 @@ CFsurvival.nuisance.options <- function(cross.fit = TRUE, V = ifelse(cross.fit, 
 
 .estimate.uniform.quantile <- function(IF.vals, conf.level=.95, scale=TRUE) {
     n <- nrow(IF.vals)
+
+    # sometimes error HERE --> IF might become a vector if so just take length #
+    if(is.null(n))
+        n <- length(IF.vals)
     if(scale) IF.vals <- scale(IF.vals)
     maxes <- replicate(1e4, max(abs(rbind(rt(n, df = n - 1)/sqrt(n)) %*% IF.vals)))
     return(list(quantile=quantile(maxes, conf.level), maxes=maxes))

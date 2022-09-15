@@ -55,7 +55,7 @@ simul_DML_causal <- function(N = 500, # n = 250,
 
     library(dplyr)
     set.seed(s)
-    expit <- function(x,beta) 1/(1 + exp(-x %*% beta))
+    expit <- function(x,beta,int = 0) 1/(1 + exp(-x %*% beta)+int)
     covs <- ncol(X)
 
     # simulate RCT attribution #
@@ -64,7 +64,7 @@ simul_DML_causal <- function(N = 500, # n = 250,
     # gRs <- expit(exp(-sqrt(X)/2)-1/2, beta_R)
     # else
 
-    gRs <- expit(X, beta_R)
+    gRs <- expit(X, beta_R,1)
     RCT <- rbinom(n = N, size = 1, prob = gRs)
     # sum(RCT)/length(RCT)
 
@@ -146,8 +146,9 @@ simul_DML_causal <- function(N = 500, # n = 250,
 
     ################
     # X_mod <- cbind(sqrt(abs(X[,1])/2)-1/2,exp(X[,2] - X[,1])^2, log((X[,3]+ X[,4])^2), sqrt(abs(X[,4]+X[,5])), (X[,3]+X[,4]+X[,5])^2)
+    X_mod <- cbind(sqrt(abs(X[,1])/2),exp(X[,2] - X[,1]), log(abs(X[,3]+ X[,4] + 1)), sqrt(abs(X[,4]+X[,5])), (X[,5])^2)
 
-    X_mod <- cbind(sqrt(abs(X[,1])/2),exp(X[,2] - X[,1]), log(abs(X[,3]+ X[,4])+1), sqrt(abs(X[,4]+X[,5])), (X[,5])^2)
+    # X_mod <- cbind(sqrt(abs(X[,1])/2),exp(X[,2] - X[,1]), log(abs(X[,3]+ X[,4])+1), sqrt(abs(X[,4]+X[,5])), (X[,5])^2)
 
     if(covs > 5)
         X_mod <- cbind(X_mod, exp(X[,6:ncol(X)]))
@@ -304,74 +305,73 @@ simul_DML_causal <- function(N = 500, # n = 250,
 
 }
 
-
+#
 # rm(list=ls())
+# # N = 1000
+# # covs <- c(5)
+# # lambda = 0.1
+# # rho = 2
+# # rateC = 0.1
+# # run <- 23
+# # set.seed(run*covs)
+# #
 # N = 1000
-# covs <- c(5)
+# vars <- 1
 # lambda = 0.1
 # rho = 2
-# rateC = 0.1
-# run <- 23
+# rateC = 0.05
+# runs <- 100
+# covs <- 5
 #
-# set.seed(run*covs)
-
-N = 1000
-vars <- 1
-lambda = 0.1
-rho = 2
-rateC = 0.05
-runs <- 100
-covs <- 5
-
-X <- matrix(rnorm(n = N*covs,0,1), nrow = N, ncol = covs)
-beta_R = rep(0.3, covs)
-beta_A = rep(0.3, covs)
-beta_T = c(rep(0.3, covs),-0.5)
-beta_C = c(rep(0.3, covs),-1/5)
-
-
-N = N
-X = X
-beta_R = beta_R
-beta_A = beta_A
-beta_T = beta_T
-lambda = lambda
-rho = rho
-rateC = rateC
-s = 21071993 + 1
-beta_interactions = NULL
-surv_type = "exp"
-run_type = "incorrect"
-betaT = 1
-lambdaT = 5
-betaC = 2
-lambdaC = 10
-misspe = c("sampling")
-
-prop.RCT.SL.library = c("SL.glm", "SL.mean","SL.rpart","SL.gbm")
-prop.SL.library = c("SL.mean")
-event.SL.library = c( "survSL.coxph", "survSL.weibreg", "survSL.expreg")
-cens.SL.library = c("survSL.coxph", "survSL.weibreg", "survSL.expreg")
-
-ex_simul <- simul_DML_causal(N = N, # n = n,
-                             X = X,
-                             beta_R = beta_R,
-                             beta_A = beta_A,
-                             beta_T = beta_T,
-                             beta_C = beta_C,
-                             prop.RCT.SL.library = prop.RCT.SL.library,
-                             prop.SL.library = prop.SL.library,
-                             event.SL.library = event.SL.library,
-                             cens.SL.library =cens.SL.library,
-                             lambda = lambda, rho = rho, rateC = rateC, s = s,
-                             run_type = "incorrect",
-                             surv_type = "exp",
-                             misspe = misspe
-)
-
-ex_simul$Delta_0_bias[80]
-ex_simul$Delta_1_bias[80]
-summary(ex_simul$fit$nuisance$prop.pred.RCT)
+# X <- matrix(rnorm(n = N*covs,0,1), nrow = N, ncol = covs)
+# beta_R = rep(0.5, covs)
+# beta_A = rep(0.5, covs)
+# beta_T = c(rep(0.5, covs),-1)
+# beta_C = c(rep(0.5, covs),-1/5)
+#
+#
+# N = N
+# X = X
+# beta_R = beta_R
+# beta_A = beta_A
+# beta_T = beta_T
+# lambda = lambda
+# rho = rho
+# rateC = rateC
+# s = 21071993 + 1
+# beta_interactions = NULL
+# surv_type = "exp"
+# run_type = "incorrect"
+# betaT = 1
+# lambdaT = 5
+# betaC = 2
+# lambdaC = 10
+# misspe = c("sampling")
+#
+# prop.RCT.SL.library = c("SL.glm", "SL.mean","SL.rpart")
+# prop.SL.library = c("SL.mean")
+# event.SL.library = c( "survSL.coxph", "survSL.weibreg", "survSL.expreg")
+# cens.SL.library = c("survSL.coxph", "survSL.weibreg", "survSL.expreg")
+#
+# ex_simul <- simul_DML_causal(N = N, # n = n,
+#                              X = X,
+#                              beta_R = beta_R,
+#                              beta_A = beta_A,
+#                              beta_T = beta_T,
+#                              beta_C = beta_C,
+#                              prop.RCT.SL.library = prop.RCT.SL.library,
+#                              prop.SL.library = prop.SL.library,
+#                              event.SL.library = event.SL.library,
+#                              cens.SL.library =cens.SL.library,
+#                              lambda = lambda, rho = rho, rateC = rateC, s = s,
+#                              run_type = "incorrect",
+#                              surv_type = "exp",
+#                              misspe = misspe
+# )
+#
+# ex_simul$Delta_0_bias[80]
+# ex_simul$Delta_1_bias[80]
+# summary(ex_simul$fit$nuisance$prop.pred.RCT)
 
 
 # library(ggplot2)

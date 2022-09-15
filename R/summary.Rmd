@@ -1,0 +1,111 @@
+---
+title: "Performance summary"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = F)
+library(ggplot2)
+library(survival)
+library(dplyr)
+library(CFsurvival)
+library(here)
+library(reshape2)
+library(tibble)
+
+load(here("./results/simulation_results.Rdata"))
+```
+
+# Summary
+
+## Our method
+
+```{r}
+out <- results[[1]]
+results_out <- as.data.frame(t(do.call('rbind',lapply(out, function(x){
+    c(mean(x[1:2,1]), mean(x[1:2,2]), mean(x[1:2,3]), mean(x[1:2,4]), mean(x[1:2,5]))
+    
+}))))
+colnames(results_out) <- seq(0, 9, 1)
+results_out$Type <- colnames(results[[1]][[1]])
+results_out <- melt(results_out)
+
+colnames(results_out) <- c("Type","Time","Bias")
+results_out %>% 
+    ggplot(aes(x = Time, y = Bias, group = Type, color = Type)) + geom_line() + theme_bw()
+```
+
+
+## Adding an interaction term
+
+```{r}
+out <- results[[2]]
+results_out <- as.data.frame(t(do.call('rbind',lapply(out, function(x){
+    c(mean(x[1:2,1]), mean(x[1:2,2]), mean(x[1:2,3]), mean(x[1:2,4]), mean(x[1:2,5]))
+    
+}))))
+colnames(results_out) <- seq(0, 9, 1)
+results_out$Type <- colnames(results[[2]][[1]])
+results_out <- melt(results_out)
+
+colnames(results_out) <- c("Type","Time","Bias")
+results_out %>% 
+    ggplot(aes(x = Time, y = Bias, group = Type, color = Type)) + geom_line() + theme_bw()
+```
+
+## Comparison methods
+
+### Coxph 
+
+```{r}
+out <- results[[3]]
+results_out <- as.data.frame(t(do.call('rbind',lapply(out, function(x){
+    c(mean(x[1:2,1]), mean(x[1:2,2]), mean(x[1:2,3]))
+    
+}))))
+colnames(results_out) <- seq(0, 9, 1)
+results_out$Type <- colnames(results[[3]][[1]])
+results_out <- melt(results_out)
+
+colnames(results_out) <- c("Type","Time","Bias")
+results_out %>% 
+    ggplot(aes(x = Time, y = Bias, group = Type, color = Type)) + geom_line() + theme_bw()
+```
+
+### Weighted Coxph
+
+```{r}
+out <- results[[4]]
+results_out <- as.data.frame(t(do.call('rbind',lapply(out, function(x){
+    c(mean(x[1:2,1]), mean(x[1:2,2]), mean(x[1:2,3]), mean(x[1:2,4]), mean(x[1:2,5]))
+    
+}))))
+colnames(results_out) <- seq(0, 9, 1)
+results_out$Type <- colnames(results[[4]][[1]])
+results_out <- melt(results_out)
+
+colnames(results_out) <- c("Type","Time","Bias")
+results_out %>% 
+    ggplot(aes(x = Time, y = Bias, group = Type, color = Type)) + geom_line() + theme_bw()
+```
+
+### Weighted SL
+
+
+```{r}
+out <- results[[5]]
+results_out <- as.data.frame(t(do.call('rbind',lapply(out, function(x){
+    c(mean(x[1:2,1]), mean(x[1:2,2]), mean(x[1:2,3]), mean(x[1:2,4]), mean(x[1:2,5]))
+    
+}))))
+colnames(results_out) <- seq(0, 9, 1)
+results_out$Type <- colnames(results[[5]][[1]])
+results_out <- melt(results_out)
+
+colnames(results_out) <- c("Type","Time","Bias")
+results_out %>% 
+    ggplot(aes(x = Time, y = Bias, group = Type, color = Type)) + geom_line() + theme_bw()
+```
+
+
+
