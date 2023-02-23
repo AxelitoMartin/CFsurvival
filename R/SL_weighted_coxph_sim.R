@@ -140,27 +140,18 @@ simul_coxph_SL_weighted_causal <- function(N = 500, # n = 250,
                                                         verbose = nuis$verbose))
         weigths_use <- 1/as.numeric(ifelse(weigths_use <= 0, 0.01,weigths_use)[RCT == 1])
 
-        fit <- coxph(Surv(time, event) ~ ., data = data_use,weights = weigths_use)
-        new_data <- as.data.frame(cbind(A, X))
-        colnames(new_data)[-c(1)] <- paste0("X",1:5)
+        fit <- coxph(Surv(time, event) ~ A, data = data_use,weights = weigths_use)
+        new_data <- as.data.frame( cbind(A, X))
+        colnames(new_data) <- c("A",paste0("X",1:5))
+
         predicted_0 <- survfit(fit, newdata = new_data %>% mutate(A = 0))
-        med_pred_0 <- c()
-        for(i in fit.times){
-            med_pred_0 <- c(med_pred_0, median(summary(predicted_0, times = i)$surv))
-        }
-        if(length(med_pred_0) < length(fit.times))
-            med_pred_0 <- c(med_pred_0, rep(0, length(fit.times) - length(med_pred_0)))
-        final_pred_0 <- as_tibble(cbind(fit.times, med_pred_0,out_S0))
+        S.hats.0 <- t(summary(predicted_0, times = fit.times)$surv)
+        final_pred_0 <- as_tibble(cbind(fit.times, apply(S.hats.0,2, mean),out_S0))
         colnames(final_pred_0) <- c('time','surv','true.surv')
 
-        predicted_1 <- survfit(fit, newdata = new_data  %>% mutate(A = 1))
-        med_pred_1 <- c()
-        for(i in fit.times){
-            med_pred_1 <- c(med_pred_1, median(summary(predicted_1, times = i)$surv))
-        }
-        if(length(med_pred_1) < length(fit.times))
-            med_pred_1 <- c(med_pred_1, rep(0, length(fit.times) - length(med_pred_1)))
-        final_pred_1 <- as_tibble(cbind(fit.times, med_pred_1,out_S1))
+        predicted_1 <- survfit(fit, newdata = new_data %>% mutate(A = 1))
+        S.hats.1 <- t(summary(predicted_1, times = fit.times)$surv)
+        final_pred_1 <- as_tibble(cbind(fit.times, apply(S.hats.1,2, mean),out_S1))
         colnames(final_pred_1) <- c('time','surv','true.surv')
     }
 
@@ -178,88 +169,47 @@ simul_coxph_SL_weighted_causal <- function(N = 500, # n = 250,
 
         weigths_use <- 1/as.numeric(ifelse(weigths_use <= 0, 0.01,weigths_use)[RCT == 1])
 
-        fit <- coxph(Surv(obs.time, obs.event) ~ rx, weights = weigths_use)
-        new_data <- as.data.frame(cbind(A, X))
-        colnames(new_data)[-c(1)] <- paste0("X",1:5)
+        fit <- coxph(Surv(time, event) ~ A, data = data_use,weights = weigths_use)
+        new_data <- as.data.frame( cbind(A, X))
+        colnames(new_data) <- c("A",paste0("X",1:5))
+
         predicted_0 <- survfit(fit, newdata = new_data %>% mutate(A = 0))
-        med_pred_0 <- c()
-        for(i in fit.times){
-            med_pred_0 <- c(med_pred_0, median(summary(predicted_0, times = i)$surv))
-        }
-        if(length(med_pred_0) < length(fit.times))
-            med_pred_0 <- c(med_pred_0, rep(0, length(fit.times) - length(med_pred_0)))
-        final_pred_0 <- as_tibble(cbind(fit.times, med_pred_0,out_S0))
+        S.hats.0 <- t(summary(predicted_0, times = fit.times)$surv)
+        final_pred_0 <- as_tibble(cbind(fit.times, apply(S.hats.0,2, mean),out_S0))
         colnames(final_pred_0) <- c('time','surv','true.surv')
 
-        predicted_1 <- survfit(fit, newdata = new_data  %>% mutate(A = 1))
-        med_pred_1 <- c()
-        for(i in fit.times){
-            med_pred_1 <- c(med_pred_1, median(summary(predicted_1, times = i)$surv))
-        }
-        if(length(med_pred_1) < length(fit.times))
-            med_pred_1 <- c(med_pred_1, rep(0, length(fit.times) - length(med_pred_1)))
-        final_pred_1 <- as_tibble(cbind(fit.times, med_pred_1,out_S1))
+        predicted_1 <- survfit(fit, newdata = new_data %>% mutate(A = 1))
+        S.hats.1 <- t(summary(predicted_1, times = fit.times)$surv)
+        final_pred_1 <- as_tibble(cbind(fit.times, apply(S.hats.1,2, mean),out_S1))
         colnames(final_pred_1) <- c('time','surv','true.surv')
     }
 
     if(run_type == "incorrect"){
+        data_use <- as.data.frame(cbind(obs.time, obs.event, rx, confounders))
+        colnames(data_use) <- c("time","event","A",paste0("X",1:5))
 
-        # data_use <- as.data.frame(cbind(obs.time, obs.event, rx, mod_conf))
-        # colnames(data_use) <- c("time", "event","A",paste0("X",1:5))
-        if("sampling" %in% misspe)
-            weigths_use <- unlist(.estimate.RCT_cohort.propensity(A=RCT,
-                                                           W=as.data.frame(X_mod),
-                                                           newW=as.data.frame(X_mod),
-                                                           SL.library=prop.RCT.SL.library,
-                                                           fit.treat=c(0,1),
-                                                           prop.trunc=nuis$prop.trunc,
-                                                           save.fit = nuis$save.nuis.fits,
-                                                           verbose = nuis$verbose))
-        else
-            weigths_use <- unlist(.estimate.RCT_cohort.propensity(A=RCT,
-                                                           W=as.data.frame(X),
-                                                           newW=as.data.frame(X),
-                                                           SL.library=prop.RCT.SL.library,
-                                                           fit.treat=c(0,1),
-                                                           prop.trunc=nuis$prop.trunc,
-                                                           save.fit = nuis$save.nuis.fits,
-                                                           verbose = nuis$verbose))
-
+        weigths_use <- unlist(.estimate.RCT_cohort.propensity(A=RCT,
+                                                              W=as.data.frame(X_mod),
+                                                              newW=as.data.frame(X_mod),
+                                                              SL.library=prop.RCT.SL.library,
+                                                              fit.treat=c(0,1),
+                                                              prop.trunc=nuis$prop.trunc,
+                                                              save.fit = nuis$save.nuis.fits,
+                                                              verbose = nuis$verbose))
         weigths_use <- 1/as.numeric(ifelse(weigths_use <= 0, 0.01,weigths_use)[RCT == 1])
 
-        if("survival" %in% misspe){
-            data_use <- as.data.frame(cbind(obs.time, obs.event, rx, mod_conf))
-            colnames(data_use) <- c("time", "event","A",paste0("X",1:5))
-            fit <- coxph(Surv(time, event) ~ ., data = data_use,weights = weigths_use)
-            # new_data <- as.data.frame(cbind(dat[,-3], A, X_mod)) # X_mod
-        }
-        else{
-            data_use <- as.data.frame(cbind(obs.time, obs.event, rx, confounders))
-            colnames(data_use) <- c("time", "event","A",paste0("X",1:5))
-            fit <- coxph(Surv(time, event) ~ ., data = data_use,weights = weigths_use)
-            # new_data <- as.data.frame(cbind(dat[,-3], A, X_mod)) # X
-        }
+        fit <- coxph(Surv(time, event) ~ A, data = data_use,weights = weigths_use)
+        new_data <- as.data.frame( cbind(A, X))
+        colnames(new_data) <- c("A",paste0("X",1:5))
 
-        new_data <- as.data.frame(cbind(A, X))
-        colnames(new_data)[-c(1)] <- paste0("X",1:5)
         predicted_0 <- survfit(fit, newdata = new_data %>% mutate(A = 0))
-        med_pred_0 <- c()
-        for(i in fit.times){
-            med_pred_0 <- c(med_pred_0, median(summary(predicted_0, times = i)$surv))
-        }
-        if(length(med_pred_0) < length(fit.times))
-            med_pred_0 <- c(med_pred_0, rep(0, length(fit.times) - length(med_pred_0)))
-        final_pred_0 <- as_tibble(cbind(fit.times, med_pred_0,out_S0))
+        S.hats.0 <- t(summary(predicted_0, times = fit.times)$surv)
+        final_pred_0 <- as_tibble(cbind(fit.times, apply(S.hats.0,2, mean),out_S0))
         colnames(final_pred_0) <- c('time','surv','true.surv')
 
-        predicted_1 <- survfit(fit, newdata = new_data  %>% mutate(A = 1))
-        med_pred_1 <- c()
-        for(i in fit.times){
-            med_pred_1 <- c(med_pred_1, median(summary(predicted_1, times = i)$surv))
-        }
-        if(length(med_pred_1) < length(fit.times))
-            med_pred_1 <- c(med_pred_1, rep(0, length(fit.times) - length(med_pred_1)))
-        final_pred_1 <- as_tibble(cbind(fit.times, med_pred_1,out_S1))
+        predicted_1 <- survfit(fit, newdata = new_data %>% mutate(A = 1))
+        S.hats.1 <- t(summary(predicted_1, times = fit.times)$surv)
+        final_pred_1 <- as_tibble(cbind(fit.times, apply(S.hats.1,2, mean),out_S1))
         colnames(final_pred_1) <- c('time','surv','true.surv')
 
     }
@@ -347,7 +297,7 @@ simul_coxph_SL_weighted_causal <- function(N = 500, # n = 250,
 }
 
 
-
+# library(CFsurvival)
 # library(survival)
 # N = 1000
 # vars <- 1
@@ -388,6 +338,25 @@ simul_coxph_SL_weighted_causal <- function(N = 500, # n = 250,
 # event.SL.library = c( "survSL.coxph", "survSL.weibreg", "survSL.expreg")
 # cens.SL.library = c("survSL.coxph", "survSL.weibreg", "survSL.expreg")
 #
+# source("./R/estimate_nuisances.R")
+#
+# CFsurvival.nuisance.options <- function(cross.fit = TRUE, V = ifelse(cross.fit, 10, 1), folds = NULL, eval.times = NULL,
+#                                         event.SL.library = lapply(c("survSL.km", "survSL.coxph", "survSL.expreg", "survSL.weibreg", "survSL.loglogreg", "survSL.gam", "survSL.rfsrc"), function(alg) c(alg, "survscreen.glmnet", "survscreen.marg", "All") ),  event.pred.0 = NULL, event.pred.1 = NULL, event.pred.0_c = NULL, event.pred.1_c = NULL,
+#                                         cens.SL.library = lapply(c("survSL.km", "survSL.coxph", "survSL.expreg", "survSL.weibreg", "survSL.loglogreg", "survSL.gam", "survSL.rfsrc"), function(alg) c(alg, "survscreen.glmnet", "survscreen.marg", "All") ),  cens.trunc=0, cens.pred.0 = NULL, cens.pred.1 = NULL, cens.pred.0_c = NULL, cens.pred.1_c = NULL,
+#                                         survSL.control = list(initWeightAlg = "survSL.rfsrc", verbose=FALSE), survSL.cvControl = list(V = 10), save.nuis.fits = FALSE,
+#                                         prop.SL.library = lapply(c("SL.mean", "SL.glm", "SL.gam", "SL.earth", "SL.ranger", "SL.xgboost"), function(alg) c(alg, "screen.glmnet", "screen.corRank", "All") ),
+#                                         prop.RCT.SL.library = lapply(c("SL.mean", "SL.glm", "SL.gam", "SL.earth", "SL.ranger", "SL.xgboost"), function(alg) c(alg, "screen.glmnet", "screen.corRank", "All") ),
+#                                         prop.trunc=0, prop.pred = NULL,
+#                                         verbose=NULL) {
+#     list(cross.fit = cross.fit, V = V, folds = folds, eval.times = eval.times,
+#          event.SL.library = event.SL.library, event.pred.0 = event.pred.0, event.pred.1 = event.pred.1, event.pred.0_c = event.pred.0_c, event.pred.1_c = event.pred.1_c,
+#          cens.SL.library = cens.SL.library, cens.trunc=cens.trunc, cens.pred.0 = cens.pred.0, cens.pred.1 = cens.pred.1, cens.pred.0_c = cens.pred.0_c, cens.pred.1_c = cens.pred.1_c,
+#          survSL.control = survSL.control,
+#          survSL.cvControl = survSL.cvControl,
+#          save.nuis.fits = save.nuis.fits,
+#          prop.SL.library = prop.SL.library,  prop.RCT.SL.library = prop.RCT.SL.library, prop.trunc=prop.trunc, prop.pred = prop.pred, verbose=verbose)
+# }
+#
 # ex_simul <- simul_coxph_SL_weighted_causal(N = N, # n = n,
 #                                X = X,
 #                                beta_R = beta_R,
@@ -399,13 +368,13 @@ simul_coxph_SL_weighted_causal <- function(N = 500, # n = 250,
 #                                event.SL.library = event.SL.library,
 #                                cens.SL.library =cens.SL.library,
 #                                lambda = lambda, rho = rho, rateC = rateC, s = s,
-#                                run_type = "correct",
+#                                run_type = "incorrect",
 #                                surv_type = "exp",
 #                                misspe = c("sampling","survival")
 # )
 #
-# ex_simul$Delta_0_bias[80]
-# ex_simul$Delta_1_bias[80]
+# ex_simul$Delta_0_bias[8]
+# ex_simul$Delta_1_bias[8]
 
 
 

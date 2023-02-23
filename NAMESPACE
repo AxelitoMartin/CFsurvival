@@ -1,1 +1,2 @@
 exportPattern("^[[:alpha:]]+")
+#export("generate_counterfactual", "generate_counterfactual_nonlinear","simulWeibDat","simulWeibDat_nonlinear","simul_methods_causal")

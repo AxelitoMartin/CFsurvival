@@ -152,15 +152,43 @@ simul_coxph_weighted_causal <- function(N = 500, # n = 250,
     ### marginal --> just a regular cox model ###
     if(run_type == "correct"){
 
-        data_use <- as.data.frame(cbind(obs.time, obs.event, rx, confounders))
-        colnames(data_use) <- c("time", "event", "A",paste0("X",1:5))
-        logit_fit <- glm(RCT ~ ., data = data_use %>% select(-one_of(c("time","event","A"))))
+        data_use <- as.data.frame(cbind(RCT, X))
+        colnames(data_use) <- c("RCT",paste0("X",1:5))
+        logit_fit <- glm(RCT ~ ., data = data_use)
 
         weigths_use <- as.numeric(predict(logit_fit))
-        weigths_use <- 1/ifelse(weigths_use <= 0, 0.01,weigths_use)[1:sum(train)]
+        weigths_use <- 1/ifelse(weigths_use <= 0, 0.01,weigths_use)[RCT == 1]
 
-        fit <- coxph(Surv(time, event) ~ A, data = data_use %>%
-                         select(-one_of("RCT")),weights = weigths_use)
+        data_use <- as.data.frame(cbind(obs.time, obs.event, A[RCT == 1]))
+        colnames(data_use) <- c("time", "event", "A")
+        fit <- coxph(Surv(time, event) ~ A, data = data_use,weights = weigths_use)
+
+        new_data <- as.data.frame( cbind(A, X))
+        colnames(new_data) <- c("A",paste0("X",1:5))
+
+        predicted_0 <- survfit(fit, newdata = new_data %>% mutate(A = 0))
+        S.hats.0 <- t(summary(predicted_0, times = fit.times)$surv)
+        final_pred_0 <- as_tibble(cbind(fit.times, apply(S.hats.0,2, mean),out_S0))
+        colnames(final_pred_0) <- c('time','surv','true.surv')
+
+        predicted_1 <- survfit(fit, newdata = new_data %>% mutate(A = 1))
+        S.hats.1 <- t(summary(predicted_1, times = fit.times)$surv)
+        final_pred_1 <- as_tibble(cbind(fit.times, apply(S.hats.1,2, mean),out_S1))
+        colnames(final_pred_1) <- c('time','surv','true.surv')
+    }
+
+    if(run_type == "marginal"){
+
+        data_use <- as.data.frame(cbind(RCT, X))
+        colnames(data_use) <- c("RCT",paste0("X",1:5))
+        logit_fit <- glm(RCT ~ 1, data = data_use)
+
+        weigths_use <- as.numeric(predict(logit_fit))
+        weigths_use <- 1/ifelse(weigths_use <= 0, 0.01,weigths_use)[RCT == 1]
+
+        data_use <- as.data.frame(cbind(obs.time, obs.event, A[RCT == 1]))
+        colnames(data_use) <- c("time", "event", "A")
+        fit <- coxph(Surv(time, event) ~ A, data = data_use,weights = weigths_use)
 
         new_data <- as.data.frame( cbind(A, X))
         colnames(new_data) <- c("A",paste0("X",1:5))
@@ -176,692 +204,32 @@ simul_coxph_weighted_causal <- function(N = 500, # n = 250,
         colnames(final_pred_1) <- c('time','surv','true.surv')
 
 
-        # final_pred_0_RCT <- matrix(NA, nrow = sum(RCT == 1), ncol = length(nuis$eval.times))
-        # final_pred_0_Obs <- matrix(NA, nrow = sum(RCT == 0), ncol = length(nuis$eval.times))
-        # final_pred_1_RCT <- matrix(NA, nrow = sum(RCT == 1), ncol = length(nuis$eval.times))
-        # final_pred_1_Obs <- matrix(NA, nrow = sum(RCT == 0), ncol = length(nuis$eval.times))
-        #
-        # final_pred_cens_0_RCT <- matrix(NA, nrow = sum(RCT == 1), ncol = length(nuis$eval.times))
-        # final_pred_cens_0_Obs <- matrix(NA, nrow = sum(RCT == 0), ncol = length(nuis$eval.times))
-        # final_pred_cens_1_RCT <- matrix(NA, nrow = sum(RCT == 1), ncol = length(nuis$eval.times))
-        # final_pred_cens_1_Obs <- matrix(NA, nrow = sum(RCT == 0), ncol = length(nuis$eval.times))
-        #
-        # for(v in 1:V) {
-        #     train <- folds != v
-        #     test <- folds == v
-        #     train_w <- folds.c != v
-        #     test_w <- folds.c == v
-        #
-        #
-        #     data_use <- as.data.frame(
-        #         rbind(
-        #             cbind(obs.time[train], obs.event[train], rx[train], confounders[train,], RCT[RCT == 1][train]),
-        #             cbind(dat$time[RCT == 0][train_w], dat$status[RCT == 0][train_w], A[RCT == 0][train_w], X[RCT == 0,][train_w,], RCT[RCT == 0][train_w])
-        #         )
-        #     )
-        #     colnames(data_use) <- c("time", "event", "A",paste0("X",1:5),"RCT")
-        #     logit_fit <- glm(RCT ~ ., data = data_use %>% select(-one_of(c("time","event","A"))))
-        #
-        #     weigths_use <- as.numeric(predict(logit_fit))
-        #     weigths_use <- 1/ifelse(weigths_use <= 0, 0.01,weigths_use)[1:sum(train)]
-        #
-        #     fit <- coxph(Surv(time, event) ~ A, data = data_use[1:sum(train),] %>%
-        #                      select(-one_of("RCT")),weights = weigths_use) # no covaraites , just treatment
-        #     fit_cens <- coxph(Surv(time, 1 - event) ~ ., data = data_use[1:sum(train),] %>%
-        #                      select(-one_of("RCT")),weights = weigths_use)
-        #
-        #
-        #     new_data <- as.data.frame( rbind(
-        #         cbind(obs.time[test], A[RCT == 1][test], X[RCT == 1,][test,]),
-        #         cbind(dat$time[RCT == 0][test_w],A[RCT == 0][test_w], X[RCT == 0,][test_w,]))
-        #     )
-        #     colnames(new_data) <- c("time","A",paste0("X",1:5))
-        #
-        #     predicted_0 <- survfit(fit, newdata = new_data %>% mutate(A = 0) %>% select(-one_of("time")))
-        #     S.hats.0_temp <- t(summary(predicted_0, times = nuis$eval.times)$surv)
-        #     if(ncol(S.hats.0_temp) < ncol(final_pred_0_RCT)){
-        #         S.hats.0_temp <- cbind(S.hats.0_temp, matrix(0L, ncol = ncol(final_pred_0_RCT) - ncol(S.hats.0_temp), nrow = nrow(S.hats.0_temp) ))
-        #     }
-        #     # S.hats.0_temp <- t(predicted_0$surv)[,1:ncol(final_pred_0_RCT)]
-        #     final_pred_0_RCT[test,] <- S.hats.0_temp[1:sum(test),]
-        #     final_pred_0_Obs[test_w,] <- S.hats.0_temp[(sum(test)+1):nrow(S.hats.0_temp),]
-        #
-        #
-        #     predicted_cens_0 <- survfit(fit_cens, newdata = new_data %>% mutate(A = 0) %>% select(-one_of("time")))
-        #     S.hats.0_cens_temp <- t(summary(predicted_cens_0, times = nuis$eval.times)$surv)
-        #     if(ncol(S.hats.0_cens_temp) < ncol(final_pred_cens_0_RCT)){
-        #         S.hats.0_cens_temp <- cbind(S.hats.0_cens_temp, matrix(0L, ncol = ncol(final_pred_cens_0_RCT) - ncol(S.hats.0_cens_temp), nrow = nrow(S.hats.0_temp) ))
-        #     }
-        #     # S.hats.0_temp <- t(predicted_0$surv)[,1:ncol(final_pred_0_RCT)]
-        #     final_pred_cens_0_RCT[test,] <- S.hats.0_cens_temp[1:sum(test),]
-        #     final_pred_cens_0_Obs[test_w,] <- S.hats.0_cens_temp[(sum(test)+1):nrow(S.hats.0_cens_temp),]
-        #     # med_pred_0 <- c()
-        #     # for(i in fit.times){
-        #     #     med_pred_0 <- c(med_pred_0, median(summary(predicted_0, times = i)$surv))
-        #     # }
-        #     # if(length(med_pred_0) < length(fit.times))
-        #     #     med_pred_0 <- c(med_pred_0, rep(0, length(fit.times) - length(med_pred_0)))
-        #     # final_pred_0 <- rbind(final_pred_0, med_pred_0)
-        #     # final_pred_0 <- as_tibble(cbind(fit.times, med_pred_0,out_S0))
-        #     # colnames(final_pred_0) <- c('time','surv','true.surv')
-        #
-        #     predicted_1 <- survfit(fit, newdata = new_data  %>% mutate(A = 1) %>% select(-one_of("time")))
-        #     S.hats.1_temp <- t(summary(predicted_1, times = nuis$eval.times)$surv)
-        #     # S.hats.1_temp <- t(predicted_1$surv)[,1:ncol(final_pred_0_RCT)]
-        #     if(ncol(S.hats.1_temp) < ncol(final_pred_1_RCT)){
-        #         S.hats.1_temp <- cbind(S.hats.1_temp, matrix(0L, ncol = ncol(final_pred_1_RCT) - ncol(S.hats.1_temp), nrow = nrow(S.hats.1_temp) ))
-        #     }
-        #     final_pred_1_RCT[test,] <- S.hats.1_temp[1:sum(test),]
-        #     final_pred_1_Obs[test_w,] <- S.hats.1_temp[(sum(test)+1):nrow(S.hats.1_temp),]
-        #
-        #     predicted_cens_1 <- survfit(fit_cens, newdata = new_data %>% mutate(A = 1) %>% select(-one_of("time")))
-        #     S.hats.1_cens_temp <- t(summary(predicted_cens_1, times = nuis$eval.times)$surv)
-        #     if(ncol(S.hats.1_cens_temp) < ncol(final_pred_cens_1_RCT)){
-        #         S.hats.1_cens_temp <- cbind(S.hats.1_cens_temp, matrix(0L, ncol = ncol(final_pred_cens_1_RCT) - ncol(S.hats.1_cens_temp), nrow = nrow(S.hats.0_temp) ))
-        #     }
-        #     # S.hats.0_temp <- t(predicted_0$surv)[,1:ncol(final_pred_0_RCT)]
-        #     final_pred_cens_1_RCT[test,] <- S.hats.1_cens_temp[1:sum(test),]
-        #     final_pred_cens_1_Obs[test_w,] <- S.hats.1_cens_temp[(sum(test)+1):nrow(S.hats.0_cens_temp),]
-        #
-        #     # med_pred_1 <- c()
-        #     # for(i in fit.times){
-        #     #     med_pred_1 <- c(med_pred_1, median(summary(predicted_1, times = i)$surv))
-        #     # }
-        #     # if(length(med_pred_1) < length(fit.times))
-        #     #     med_pred_1 <- c(med_pred_1, rep(0, length(fit.times) - length(med_pred_1)))
-        #     # final_pred_1 <- rbind(final_pred_1, med_pred_1)
-        #     # final_pred_1 <- as_tibble(cbind(fit.times, med_pred_1,out_S1))
-        #     # colnames(final_pred_1) <- c('time','surv','true.surv')
-        # }
-        #
-        #
-        # # get counter factual survival #
-        # nuis <- list()
-        # nuis$eval.times <- sort(unique(c(0,obs.time[obs.time > 0 & obs.time <= max(fit.times)], max(fit.times))))
-        # n <- length(obs.time)
-        #
-        #
-        # surv.0 <- .get.survival2(Y=obs.time, Delta=obs.event,
-        #                          A=1-A[RCT == 1], fit.times=fit.times,
-        #                          eval.times=nuis$eval.times,
-        #                          S.hats=final_pred_0_RCT,
-        #                          G.hats=final_pred_cens_0_RCT,
-        #                          #matrix(1L, nrow = nrow(final_pred_0_RCT), ncol = ncol(final_pred_0_RCT)),
-        #                          g.hats= sum(A[RCT==1]==1)/sum(RCT),#rep(1, n),
-        #                          pi.RCT.hats = rep(sum(RCT)/N),W_c = W_c,
-        #                          S.hats_c = final_pred_0_Obs,
-        #                          G.hats_c = final_pred_cens_0_Obs
-        #                          #matrix(1L, nrow = nrow(final_pred_0_Obs), ncol = ncol(final_pred_0_Obs))
-        # )
-        #
-        #
-        # surv.1 <- .get.survival2(Y=obs.time, Delta=obs.event,
-        #                          A=A[RCT == 1], fit.times=fit.times,
-        #                          eval.times=nuis$eval.times,
-        #                          S.hats=final_pred_1_RCT,
-        #                          G.hats= final_pred_cens_1_RCT,
-        #                          #matrix(1L, nrow = nrow(final_pred_1_RCT), ncol = ncol(final_pred_1_RCT)),
-        #                          g.hats=sum(A[RCT==1]==1)/sum(RCT), #rep(1, n),
-        #                          pi.RCT.hats = rep(sum(RCT)/N),W_c = W_c,
-        #                          S.hats_c = final_pred_1_Obs,
-        #                          G.hats_c = final_pred_cens_1_Obs
-        #                          #matrix(1L, nrow = nrow(final_pred_1_Obs), ncol = ncol(final_pred_1_Obs))
-        # )
-        #
-        #
-        # final_pred_0 <- as_tibble(cbind(fit.times, c(1,surv.0$surv),out_S0))
-        # colnames(final_pred_0) <- c('time','surv','true.surv')
-        # final_pred_1 <- as_tibble(cbind(fit.times, c(1,surv.1$surv),out_S1))
-        # colnames(final_pred_1) <- c('time','surv','true.surv')
-
-
-        # ####
-        # final_pred_0 <- data.frame()
-        # final_pred_1 <- data.frame()
-        # for(v in 1:V) {
-        #     train <- folds != v
-        #     test <- folds == v
-        #     train_w <- folds.c != v
-        #     test_w <- folds.c == v
-        #
-        #
-        #     # data_use <- as.data.frame(cbind(dat$time, dat$status, A, X,RCT))
-        #     data_use <- as.data.frame(
-        #         rbind(
-        #             cbind(obs.time[train], obs.event[train], rx[train], confounders[train,], RCT[RCT == 1][train]),
-        #             cbind(dat$time[RCT == 0][train_w], dat$status[RCT == 0][train_w], A[RCT == 0][train_w], X[RCT == 0,][train_w,], RCT[RCT == 0][train_w])
-        #         )
-        #     )
-        #     colnames(data_use) <- c("time", "event", "A",paste0("X",1:5),"RCT")
-        #     logit_fit <- glm(RCT ~ ., data = data_use %>% select(-one_of(c("time","event","A"))))
-        #
-        #     weigths_use <- as.numeric(predict(logit_fit))
-        #     weigths_use <- 1/ifelse(weigths_use <= 0, 0.01,weigths_use)[1:sum(train)]
-        #
-        #     fit <- coxph(Surv(time, event) ~ ., data = data_use[1:sum(train),] %>%
-        #                      select(-one_of("RCT")),weights = weigths_use)
-        #
-        #
-        #     new_data <- as.data.frame(
-        #         rbind(
-        #             cbind(rx[test], confounders[test,]),
-        #             cbind(A[RCT == 0][test_w], X[RCT == 0,][test_w,])
-        #         )
-        #     )
-        #
-        #     colnames(new_data) <- c("A",paste0("X",1:5))
-        #     predicted_0 <- survfit(fit, newdata = new_data %>% mutate(A = 0))
-        #     med_pred_0 <- c()
-        #     for(i in fit.times){
-        #         med_pred_0 <- c(med_pred_0, median(summary(predicted_0, times = i)$surv))
-        #     }
-        #     if(length(med_pred_0) < length(fit.times))
-        #         med_pred_0 <- c(med_pred_0, rep(0, length(fit.times) - length(med_pred_0)))
-        #     final_pred_0 <- rbind(final_pred_0, med_pred_0)
-        #     # final_pred_0 <- as_tibble(cbind(fit.times, med_pred_0,out_S0))
-        #     # colnames(final_pred_0) <- c('time','surv','true.surv')
-        #
-        #     predicted_1 <- survfit(fit, newdata = new_data  %>% mutate(A = 1))
-        #     med_pred_1 <- c()
-        #     for(i in fit.times){
-        #         med_pred_1 <- c(med_pred_1, median(summary(predicted_1, times = i)$surv))
-        #     }
-        #     if(length(med_pred_1) < length(fit.times))
-        #         med_pred_1 <- c(med_pred_1, rep(0, length(fit.times) - length(med_pred_1)))
-        #     final_pred_1 <- rbind(final_pred_1, med_pred_1)
-        #     # final_pred_1 <- as_tibble(cbind(fit.times, med_pred_1,out_S1))
-        #     # colnames(final_pred_1) <- c('time','surv','true.surv')
-        # }
-        #
-        # # merge results #
-        # final_pred_0_med <- apply(final_pred_0, 2, median)
-        # final_pred_1_med <- apply(final_pred_1, 2, median)
-        #
-        # final_pred_0 <- as_tibble(cbind(fit.times, final_pred_0_med,out_S0))
-        # colnames(final_pred_0) <- c('time','surv','true.surv')
-        # final_pred_1 <- as_tibble(cbind(fit.times, final_pred_1_med,out_S1))
-        # colnames(final_pred_1) <- c('time','surv','true.surv')
-
-
-    }
-
-    if(run_type == "marginal"){
-
-
-        final_pred_0_RCT <- matrix(NA, nrow = sum(RCT == 1), ncol = length(nuis$eval.times))
-        final_pred_0_Obs <- matrix(NA, nrow = sum(RCT == 0), ncol = length(nuis$eval.times))
-        final_pred_1_RCT <- matrix(NA, nrow = sum(RCT == 1), ncol = length(nuis$eval.times))
-        final_pred_1_Obs <- matrix(NA, nrow = sum(RCT == 0), ncol = length(nuis$eval.times))
-
-        final_pred_cens_0_RCT <- matrix(NA, nrow = sum(RCT == 1), ncol = length(nuis$eval.times))
-        final_pred_cens_0_Obs <- matrix(NA, nrow = sum(RCT == 0), ncol = length(nuis$eval.times))
-        final_pred_cens_1_RCT <- matrix(NA, nrow = sum(RCT == 1), ncol = length(nuis$eval.times))
-        final_pred_cens_1_Obs <- matrix(NA, nrow = sum(RCT == 0), ncol = length(nuis$eval.times))
-
-        for(v in 1:V) {
-            train <- folds != v
-            test <- folds == v
-            train_w <- folds.c != v
-            test_w <- folds.c == v
-
-
-            data_use <- as.data.frame(cbind(dat$time, dat$status, A, X,RCT))
-            colnames(data_use) <- c("time", "event", "A",paste0("X",1:5),"RCT")
-            logit_fit <- glm(RCT ~ 1, data = data_use %>% select(-one_of(c("time","event","A"))))
-
-            weigths_use <- as.numeric(predict(logit_fit))
-            weigths_use <- 1/ifelse(weigths_use <= 0, 0.01,weigths_use)[RCT == 1]
-
-            fit <- coxph(Surv(time,event) ~ A, data = data_use[RCT == 1,]  %>%
-                             select(-one_of("RCT")), weights = weigths_use)
-            fit_cens <- coxph(Surv(time,1 - event) ~ A, data = data_use[RCT == 1,]  %>%
-                                  select(-one_of("RCT")), weights = weigths_use)
-
-
-            new_data <- as.data.frame( rbind(
-                cbind(obs.time[test], A[RCT == 1][test], X[RCT == 1,][test,]),
-                cbind(dat$time[RCT == 0][test_w],A[RCT == 0][test_w], X[RCT == 0,][test_w,]))
-            )
-            colnames(new_data) <- c("time","A",paste0("X",1:5))
-            predicted_0 <- survfit(fit, newdata = new_data %>% mutate(A = 0) %>% select(-one_of("time")))
-            S.hats.0_temp <- t(summary(predicted_0, times = nuis$eval.times)$surv)
-            # S.hats.0_temp <- t(predicted_0$surv)[,1:ncol(final_pred_0_RCT)]
-            if(ncol(S.hats.0_temp) < ncol(final_pred_0_RCT)){
-                S.hats.0_temp <- cbind(S.hats.0_temp, matrix(0L, ncol = ncol(final_pred_0_RCT) - ncol(S.hats.0_temp), nrow = nrow(S.hats.0_temp) ))
-            }
-            final_pred_0_RCT[test,] <- S.hats.0_temp[1:sum(test),]
-            final_pred_0_Obs[test_w,] <- S.hats.0_temp[(sum(test)+1):nrow(S.hats.0_temp),]
-
-            predicted_cens_0 <- survfit(fit_cens, newdata = new_data %>% mutate(A = 0) %>% select(-one_of("time")))
-            S.hats.0_cens_temp <- t(summary(predicted_cens_0, times = nuis$eval.times)$surv)
-            if(ncol(S.hats.0_cens_temp) < ncol(final_pred_cens_0_RCT)){
-                S.hats.0_cens_temp <- cbind(S.hats.0_cens_temp, matrix(0L, ncol = ncol(final_pred_cens_0_RCT) - ncol(S.hats.0_cens_temp), nrow = nrow(S.hats.0_temp) ))
-            }
-            # S.hats.0_temp <- t(predicted_0$surv)[,1:ncol(final_pred_0_RCT)]
-            final_pred_cens_0_RCT[test,] <- S.hats.0_cens_temp[1:sum(test),]
-            final_pred_cens_0_Obs[test_w,] <- S.hats.0_cens_temp[(sum(test)+1):nrow(S.hats.0_cens_temp),]
-
-            # med_pred_0 <- c()
-            # for(i in fit.times){
-            #     med_pred_0 <- c(med_pred_0, median(summary(predicted_0, times = i)$surv))
-            # }
-            # if(length(med_pred_0) < length(fit.times))
-            #     med_pred_0 <- c(med_pred_0, rep(0, length(fit.times) - length(med_pred_0)))
-            # final_pred_0 <- rbind(final_pred_0, med_pred_0)
-            # final_pred_0 <- as_tibble(cbind(fit.times, med_pred_0,out_S0))
-            # colnames(final_pred_0) <- c('time','surv','true.surv')
-
-            predicted_1 <- survfit(fit, newdata = new_data  %>% mutate(A = 1))
-            S.hats.1_temp <- t(summary(predicted_1, times = nuis$eval.times)$surv)
-            # S.hats.1_temp <- t(predicted_1$surv)[,1:ncol(final_pred_0_RCT)]
-            if(ncol(S.hats.1_temp) < ncol(final_pred_1_RCT)){
-                S.hats.1_temp <- cbind(S.hats.1_temp, matrix(0L, ncol = ncol(final_pred_1_RCT) - ncol(S.hats.1_temp), nrow = nrow(S.hats.1_temp) ))
-            }
-            final_pred_1_RCT[test,] <- S.hats.1_temp[1:sum(test),]
-            final_pred_1_Obs[test_w,] <- S.hats.1_temp[(sum(test)+1):nrow(S.hats.1_temp),]
-
-            predicted_cens_1 <- survfit(fit_cens, newdata = new_data %>% mutate(A = 1) %>% select(-one_of("time")))
-            S.hats.1_cens_temp <- t(summary(predicted_cens_1, times = nuis$eval.times)$surv)
-            if(ncol(S.hats.1_cens_temp) < ncol(final_pred_cens_1_RCT)){
-                S.hats.1_cens_temp <- cbind(S.hats.1_cens_temp, matrix(0L, ncol = ncol(final_pred_cens_1_RCT) - ncol(S.hats.1_cens_temp), nrow = nrow(S.hats.0_temp) ))
-            }
-            # S.hats.0_temp <- t(predicted_0$surv)[,1:ncol(final_pred_0_RCT)]
-            final_pred_cens_1_RCT[test,] <- S.hats.1_cens_temp[1:sum(test),]
-            final_pred_cens_1_Obs[test_w,] <- S.hats.1_cens_temp[(sum(test)+1):nrow(S.hats.0_cens_temp),]
-
-            # med_pred_1 <- c()
-            # for(i in fit.times){
-            #     med_pred_1 <- c(med_pred_1, median(summary(predicted_1, times = i)$surv))
-            # }
-            # if(length(med_pred_1) < length(fit.times))
-            #     med_pred_1 <- c(med_pred_1, rep(0, length(fit.times) - length(med_pred_1)))
-            # final_pred_1 <- rbind(final_pred_1, med_pred_1)
-            # final_pred_1 <- as_tibble(cbind(fit.times, med_pred_1,out_S1))
-            # colnames(final_pred_1) <- c('time','surv','true.surv')
-        }
-
-
-        # get counter factual survival #
-        nuis <- list()
-        nuis$eval.times <- sort(unique(c(0,obs.time[obs.time > 0 & obs.time <= max(fit.times)], max(fit.times))))
-        n <- length(obs.time)
-
-
-        surv.0 <- .get.survival2(Y=obs.time, Delta=obs.event,
-                                 A=1-A[RCT == 1], fit.times=fit.times,
-                                 eval.times=nuis$eval.times,
-                                 S.hats=final_pred_0_RCT,
-                                 G.hats=final_pred_cens_0_RCT,
-                                 #matrix(1L, nrow = nrow(final_pred_0_RCT), ncol = ncol(final_pred_0_RCT)),
-                                 g.hats= sum(A[RCT==1]==1)/sum(RCT),#rep(1, n),
-                                 pi.RCT.hats = rep(sum(RCT)/N),W_c = W_c,
-                                 S.hats_c = final_pred_0_Obs,
-                                 G.hats_c = final_pred_cens_0_Obs
-                                 #matrix(1L, nrow = nrow(final_pred_0_Obs), ncol = ncol(final_pred_0_Obs))
-        )
-
-
-        surv.1 <- .get.survival2(Y=obs.time, Delta=obs.event,
-                                 A=A[RCT == 1], fit.times=fit.times,
-                                 eval.times=nuis$eval.times,
-                                 S.hats=final_pred_1_RCT,
-                                 G.hats= final_pred_cens_1_RCT,
-                                 #matrix(1L, nrow = nrow(final_pred_1_RCT), ncol = ncol(final_pred_1_RCT)),
-                                 g.hats=sum(A[RCT==1]==1)/sum(RCT), #rep(1, n),
-                                 pi.RCT.hats = rep(sum(RCT)/N),W_c = W_c,
-                                 S.hats_c = final_pred_1_Obs,
-                                 G.hats_c = final_pred_cens_1_Obs
-                                 #matrix(1L, nrow = nrow(final_pred_1_Obs), ncol = ncol(final_pred_1_Obs))
-        )
-
-
-        final_pred_0 <- as_tibble(cbind(fit.times, c(1,surv.0$surv),out_S0))
-        colnames(final_pred_0) <- c('time','surv','true.surv')
-        final_pred_1 <- as_tibble(cbind(fit.times, c(1,surv.1$surv),out_S1))
-        colnames(final_pred_1) <- c('time','surv','true.surv')
-
-
-
-
-        # data_use <- as.data.frame(cbind(dat$time, dat$status, A, X,RCT))
-        # colnames(data_use) <- c("time", "event", "A",paste0("X",1:5),"RCT")
-        # logit_fit <- glm(RCT ~ 1, data = data_use %>% select(-one_of(c("time","event","A"))))
-        #
-        # weigths_use <- as.numeric(predict(logit_fit))
-        # weigths_use <- 1/ifelse(weigths_use <= 0, 0.01,weigths_use)[RCT == 1]
-        #
-        # fit <- coxph(Surv(time,event) ~ A, data = data_use[RCT == 1,]  %>%
-        #                  select(-one_of("RCT")), weights = weigths_use)
-        # new_data <- as.data.frame(cbind(A, X))
-        # colnames(new_data)[-c(1)] <- paste0("X",1:5)
-        # predicted_0 <- survfit(fit, newdata = new_data %>% mutate(A = 0))
-        # med_pred_0 <- c()
-        # for(i in fit.times){
-        #     med_pred_0 <- c(med_pred_0, median(summary(predicted_0, times = i)$surv))
-        # }
-        # if(length(med_pred_0) < length(fit.times))
-        #     med_pred_0 <- c(med_pred_0, rep(0, length(fit.times) - length(med_pred_0)))
-        # final_pred_0 <- as_tibble(cbind(fit.times, med_pred_0,out_S0))
-        # colnames(final_pred_0) <- c('time','surv','true.surv')
-        #
-        # predicted_1 <- survfit(fit, newdata = new_data  %>% mutate(A = 1))
-        # med_pred_1 <- c()
-        # for(i in fit.times){
-        #     med_pred_1 <- c(med_pred_1, median(summary(predicted_1, times = i)$surv))
-        # }
-        # if(length(med_pred_1) < length(fit.times))
-        #     med_pred_1 <- c(med_pred_1, rep(0, length(fit.times) - length(med_pred_1)))
-        # final_pred_1 <- as_tibble(cbind(fit.times, med_pred_1,out_S1))
-        # colnames(final_pred_1) <- c('time','surv','true.surv')
     }
 
     if(run_type == "incorrect"){
 
-        final_pred_0_RCT <- matrix(NA, nrow = sum(RCT == 1), ncol = length(nuis$eval.times))
-        final_pred_0_Obs <- matrix(NA, nrow = sum(RCT == 0), ncol = length(nuis$eval.times))
-        final_pred_1_RCT <- matrix(NA, nrow = sum(RCT == 1), ncol = length(nuis$eval.times))
-        final_pred_1_Obs <- matrix(NA, nrow = sum(RCT == 0), ncol = length(nuis$eval.times))
+        data_use <- as.data.frame(cbind(RCT, X_mod))
+        colnames(data_use) <- c("RCT",paste0("X",1:5))
+        logit_fit <- glm(RCT ~ ., data = data_use)
+        weigths_use <- as.numeric(predict(logit_fit))
+        weigths_use <- 1/ifelse(weigths_use <= 0, 0.01,weigths_use)[RCT == 1]
 
-        final_pred_cens_0_RCT <- matrix(NA, nrow = sum(RCT == 1), ncol = length(nuis$eval.times))
-        final_pred_cens_0_Obs <- matrix(NA, nrow = sum(RCT == 0), ncol = length(nuis$eval.times))
-        final_pred_cens_1_RCT <- matrix(NA, nrow = sum(RCT == 1), ncol = length(nuis$eval.times))
-        final_pred_cens_1_Obs <- matrix(NA, nrow = sum(RCT == 0), ncol = length(nuis$eval.times))
-
-        for(v in 1:V) {
-            train <- folds != v
-            test <- folds == v
-            train_w <- folds.c != v
-            test_w <- folds.c == v
-
-            if("sampling" %in% misspe){
-                train_RCT <- cbind(obs.time[train], obs.event[train], rx[train], mod_conf[train,], RCT[RCT == 1][train])
-                train_Obs <- cbind(dat$time[RCT == 0][train_w], dat$status[RCT == 0][train_w], A[RCT == 0][train_w], X_mod[RCT == 0,][train_w,], RCT[RCT == 0][train_w])
-                colnames(train_RCT) <- colnames(train_Obs) <- c("time", "event", "A",paste0("X",1:5),"RCT")
-                data_use <- as.data.frame(
-                    rbind(train_RCT,
-                          train_Obs
-                    )
-                )
-                logit_fit <- glm(RCT ~ ., data = data_use %>% select(-one_of(c("time","event","A"))))
-            }
-            else{
-                data_use <- as.data.frame(
-                    rbind(
-                        cbind(obs.time[train], obs.event[train], rx[train], confounders[train,], RCT[RCT == 1][train]),
-                        cbind(dat$time[RCT == 0][train_w], dat$status[RCT == 0][train_w], A[RCT == 0][train_w], X[RCT == 0,][train_w,], RCT[RCT == 0][train_w])
-                    )
-                )
-                colnames(data_use) <- c("time", "event", "A",paste0("X",1:5),"RCT")
-                logit_fit <- glm(RCT ~ ., data = data_use %>% select(-one_of(c("time","event","A"))))
-            }
+        data_use <- as.data.frame(cbind(obs.time, obs.event, A[RCT == 1]))
+        colnames(data_use) <- c("time", "event", "A")
+        fit <- coxph(Surv(time, event) ~ A, data = data_use,weights = weigths_use)
+        new_data <- as.data.frame( cbind(A, X))
+        colnames(new_data) <- c("A",paste0("X",1:5))
 
 
-            weigths_use <- as.numeric(predict(logit_fit))
-            weigths_use <- 1/ifelse(weigths_use <= 0, 0.01,weigths_use)[1:sum(train)]
-
-            if("survival" %in% misspe){
-
-                train_RCT <- cbind(obs.time[train], obs.event[train], rx[train], mod_conf[train,], RCT[RCT == 1][train])
-                train_Obs <- cbind(dat$time[RCT == 0][train_w], dat$status[RCT == 0][train_w], A[RCT == 0][train_w], X_mod[RCT == 0,][train_w,], RCT[RCT == 0][train_w])
-                colnames(train_RCT) <- colnames(train_Obs) <- c("time", "event", "A",paste0("X",1:5),"RCT")
-                data_use <- as.data.frame(
-                    rbind(train_RCT,
-                          train_Obs
-                    )
-                )
-
-                fit <- coxph(Surv(time, event) ~ ., data = data_use[1:sum(train),] %>%
-                                 select(-one_of("RCT")),weights = weigths_use)
-                fit_cens <- coxph(Surv(time, 1 - event) ~ ., data = data_use[1:sum(train),] %>%
-                                      select(-one_of("RCT")),weights = weigths_use)
-                test_RCT <- cbind(rx[test], mod_conf[test,])
-                test_Obs <- cbind(A[RCT == 0][test_w], X_mod[RCT == 0,][test_w,])
-                colnames(test_RCT) <- colnames(test_Obs) <- c("A",paste0("X",1:5))
-
-                new_data <- as.data.frame(
-                    rbind(
-                        test_RCT,
-                        test_Obs
-                    )
-                )
-                colnames(new_data) <- c("A",paste0("X",1:5))
-            }
-            else{
-                data_use <- as.data.frame(
-                    rbind(
-                        cbind(obs.time[train], obs.event[train], rx[train], confounders[train,], RCT[RCT == 1][train]),
-                        cbind(dat$time[RCT == 0][train_w], dat$status[RCT == 0][train_w], A[RCT == 0][train_w], X[RCT == 0,][train_w,], RCT[RCT == 0][train_w])
-                    )
-                )
-                colnames(data_use) <- c("time", "event", "A",paste0("X",1:5),"RCT")
-
-                fit <- coxph(Surv(time, event) ~ ., data = data_use[1:sum(train),] %>%
-                                 select(-one_of("RCT")),weights = weigths_use)
-                fit_cens <- coxph(Surv(time, 1 - event) ~ ., data = data_use[1:sum(train),] %>%
-                                      select(-one_of("RCT")),weights = weigths_use)
-                new_data <- as.data.frame(
-                    rbind(
-                        cbind(rx[test], confounders[test,]),
-                        cbind(A[RCT == 0][test_w], X[RCT == 0,][test_w,])
-                    )
-                )
-                colnames(new_data) <- c("A",paste0("X",1:5))
-            }
-
-            # colnames(new_data) <- c("time","A",paste0("X",1:5))
-            predicted_0 <- survfit(fit, newdata = new_data %>% mutate(A = 0))
-            S.hats.0_temp <- t(summary(predicted_0, times = nuis$eval.times)$surv)
-            # S.hats.0_temp <- t(predicted_0$surv)[,1:ncol(final_pred_0_RCT)]
-            if(ncol(S.hats.0_temp) < ncol(final_pred_0_RCT)){
-                S.hats.0_temp <- cbind(S.hats.0_temp, matrix(0L, ncol = ncol(final_pred_0_RCT) - ncol(S.hats.0_temp), nrow = nrow(S.hats.0_temp) ))
-            }
-            final_pred_0_RCT[test,] <- S.hats.0_temp[1:sum(test),]
-            final_pred_0_Obs[test_w,] <- S.hats.0_temp[(sum(test)+1):nrow(S.hats.0_temp),]
-
-            predicted_cens_0 <- survfit(fit_cens, newdata = new_data %>% mutate(A = 0))
-            S.hats.0_cens_temp <- t(summary(predicted_cens_0, times = nuis$eval.times)$surv)
-            if(ncol(S.hats.0_cens_temp) < ncol(final_pred_cens_0_RCT)){
-                S.hats.0_cens_temp <- cbind(S.hats.0_cens_temp, matrix(0L, ncol = ncol(final_pred_cens_0_RCT) - ncol(S.hats.0_cens_temp), nrow = nrow(S.hats.0_temp) ))
-            }
-            # S.hats.0_temp <- t(predicted_0$surv)[,1:ncol(final_pred_0_RCT)]
-            final_pred_cens_0_RCT[test,] <- S.hats.0_cens_temp[1:sum(test),]
-            final_pred_cens_0_Obs[test_w,] <- S.hats.0_cens_temp[(sum(test)+1):nrow(S.hats.0_cens_temp),]
-
-            # med_pred_0 <- c()
-            # for(i in fit.times){
-            #     med_pred_0 <- c(med_pred_0, median(summary(predicted_0, times = i)$surv))
-            # }
-            # if(length(med_pred_0) < length(fit.times))
-            #     med_pred_0 <- c(med_pred_0, rep(0, length(fit.times) - length(med_pred_0)))
-            # final_pred_0 <- rbind(final_pred_0, med_pred_0)
-            # final_pred_0 <- as_tibble(cbind(fit.times, med_pred_0,out_S0))
-            # colnames(final_pred_0) <- c('time','surv','true.surv')
-
-            predicted_1 <- survfit(fit, newdata = new_data  %>% mutate(A = 1))
-            S.hats.1_temp <- t(summary(predicted_1, times = nuis$eval.times)$surv)
-            # S.hats.1_temp <- t(predicted_1$surv)[,1:ncol(final_pred_0_RCT)]
-            if(ncol(S.hats.1_temp) < ncol(final_pred_1_RCT)){
-                S.hats.1_temp <- cbind(S.hats.1_temp, matrix(0L, ncol = ncol(final_pred_1_RCT) - ncol(S.hats.1_temp), nrow = nrow(S.hats.1_temp) ))
-            }
-            final_pred_1_RCT[test,] <- S.hats.1_temp[1:sum(test),]
-            final_pred_1_Obs[test_w,] <- S.hats.1_temp[(sum(test)+1):nrow(S.hats.1_temp),]
-
-            predicted_cens_1 <- survfit(fit_cens, newdata = new_data %>% mutate(A = 1))
-            S.hats.1_cens_temp <- t(summary(predicted_cens_1, times = nuis$eval.times)$surv)
-            if(ncol(S.hats.1_cens_temp) < ncol(final_pred_cens_1_RCT)){
-                S.hats.1_cens_temp <- cbind(S.hats.1_cens_temp, matrix(0L, ncol = ncol(final_pred_cens_1_RCT) - ncol(S.hats.1_cens_temp), nrow = nrow(S.hats.0_temp) ))
-            }
-            # S.hats.0_temp <- t(predicted_0$surv)[,1:ncol(final_pred_0_RCT)]
-            final_pred_cens_1_RCT[test,] <- S.hats.1_cens_temp[1:sum(test),]
-            final_pred_cens_1_Obs[test_w,] <- S.hats.1_cens_temp[(sum(test)+1):nrow(S.hats.0_cens_temp),]
-
-            # med_pred_1 <- c()
-            # for(i in fit.times){
-            #     med_pred_1 <- c(med_pred_1, median(summary(predicted_1, times = i)$surv))
-            # }
-            # if(length(med_pred_1) < length(fit.times))
-            #     med_pred_1 <- c(med_pred_1, rep(0, length(fit.times) - length(med_pred_1)))
-            # final_pred_1 <- rbind(final_pred_1, med_pred_1)
-            # final_pred_1 <- as_tibble(cbind(fit.times, med_pred_1,out_S1))
-            # colnames(final_pred_1) <- c('time','surv','true.surv')
-        }
-
-
-        # get counter factual survival #
-        nuis <- list()
-        nuis$eval.times <- sort(unique(c(0,obs.time[obs.time > 0 & obs.time <= max(fit.times)], max(fit.times))))
-        n <- length(obs.time)
-
-
-        surv.0 <- .get.survival2(Y=obs.time, Delta=obs.event,
-                                 A=1-A[RCT == 1], fit.times=fit.times,
-                                 eval.times=nuis$eval.times,
-                                 S.hats=final_pred_0_RCT,
-                                 G.hats=final_pred_cens_0_RCT,
-                                 #matrix(1L, nrow = nrow(final_pred_0_RCT), ncol = ncol(final_pred_0_RCT)),
-                                 g.hats= sum(A[RCT==1]==1)/sum(RCT),#rep(1, n),
-                                 pi.RCT.hats = rep(sum(RCT)/N),W_c = W_c,
-                                 S.hats_c = final_pred_0_Obs,
-                                 G.hats_c = final_pred_cens_0_Obs
-                                 #matrix(1L, nrow = nrow(final_pred_0_Obs), ncol = ncol(final_pred_0_Obs))
-        )
-
-
-        surv.1 <- .get.survival2(Y=obs.time, Delta=obs.event,
-                                 A=A[RCT == 1], fit.times=fit.times,
-                                 eval.times=nuis$eval.times,
-                                 S.hats=final_pred_1_RCT,
-                                 G.hats= final_pred_cens_1_RCT,
-                                 #matrix(1L, nrow = nrow(final_pred_1_RCT), ncol = ncol(final_pred_1_RCT)),
-                                 g.hats=sum(A[RCT==1]==1)/sum(RCT), #rep(1, n),
-                                 pi.RCT.hats = rep(sum(RCT)/N),W_c = W_c,
-                                 S.hats_c = final_pred_1_Obs,
-                                 G.hats_c = final_pred_cens_1_Obs
-                                 #matrix(1L, nrow = nrow(final_pred_1_Obs), ncol = ncol(final_pred_1_Obs))
-        )
-
-
-        final_pred_0 <- as_tibble(cbind(fit.times, c(1,surv.0$surv),out_S0))
+        predicted_0 <- survfit(fit, newdata = new_data %>% mutate(A = 0))
+        S.hats.0 <- t(summary(predicted_0, times = fit.times)$surv)
+        final_pred_0 <- as_tibble(cbind(fit.times, apply(S.hats.0,2, mean),out_S0))
         colnames(final_pred_0) <- c('time','surv','true.surv')
-        final_pred_1 <- as_tibble(cbind(fit.times, c(1,surv.1$surv),out_S1))
+
+        predicted_1 <- survfit(fit, newdata = new_data %>% mutate(A = 1))
+        S.hats.1 <- t(summary(predicted_1, times = fit.times)$surv)
+        final_pred_1 <- as_tibble(cbind(fit.times, apply(S.hats.1,2, mean),out_S1))
         colnames(final_pred_1) <- c('time','surv','true.surv')
-
-
-
-        # final_pred_0 <- data.frame()
-        # final_pred_1 <- data.frame()
-        # for(v in 1:V) {
-        #     train <- folds != v
-        #     test <- folds == v
-        #     train_w <- folds.c != v
-        #     test_w <- folds.c == v
-        #
-        #
-        #     # data_use <- as.data.frame(cbind(dat$time, dat$status, A, X,RCT))
-        #     if("sampling" %in% misspe){
-        #         train_RCT <- cbind(obs.time[train], obs.event[train], rx[train], mod_conf[train,], RCT[RCT == 1][train])
-        #         train_Obs <- cbind(dat$time[RCT == 0][train_w], dat$status[RCT == 0][train_w], A[RCT == 0][train_w], X_mod[RCT == 0,][train_w,], RCT[RCT == 0][train_w])
-        #         colnames(train_RCT) <- colnames(train_Obs) <- c("time", "event", "A",paste0("X",1:5),"RCT")
-        #         data_use <- as.data.frame(
-        #             rbind(train_RCT,
-        #                   train_Obs
-        #             )
-        #         )
-        #         logit_fit <- glm(RCT ~ ., data = data_use %>% select(-one_of(c("time","event","A"))))
-        #     }
-        #     else{
-        #         data_use <- as.data.frame(
-        #             rbind(
-        #                 cbind(obs.time[train], obs.event[train], rx[train], confounders[train,], RCT[RCT == 1][train]),
-        #                 cbind(dat$time[RCT == 0][train_w], dat$status[RCT == 0][train_w], A[RCT == 0][train_w], X[RCT == 0,][train_w,], RCT[RCT == 0][train_w])
-        #             )
-        #         )
-        #         colnames(data_use) <- c("time", "event", "A",paste0("X",1:5),"RCT")
-        #         logit_fit <- glm(RCT ~ ., data = data_use %>% select(-one_of(c("time","event","A"))))
-        #     }
-        #
-        #
-        #     weigths_use <- as.numeric(predict(logit_fit))
-        #     weigths_use <- 1/ifelse(weigths_use <= 0, 0.01,weigths_use)[1:sum(train)]
-        #
-        #     if("survival" %in% misspe){
-        #
-        #         train_RCT <- cbind(obs.time[train], obs.event[train], rx[train], mod_conf[train,], RCT[RCT == 1][train])
-        #         train_Obs <- cbind(dat$time[RCT == 0][train_w], dat$status[RCT == 0][train_w], A[RCT == 0][train_w], X_mod[RCT == 0,][train_w,], RCT[RCT == 0][train_w])
-        #         colnames(train_RCT) <- colnames(train_Obs) <- c("time", "event", "A",paste0("X",1:5),"RCT")
-        #         data_use <- as.data.frame(
-        #             rbind(train_RCT,
-        #                   train_Obs
-        #             )
-        #         )
-        #
-        #         fit <- coxph(Surv(time, event) ~ ., data = data_use[1:sum(train),] %>%
-        #                          select(-one_of("RCT")),weights = weigths_use)
-        #         test_RCT <- cbind(rx[test], mod_conf[test,])
-        #         test_Obs <- cbind(A[RCT == 0][test_w], X_mod[RCT == 0,][test_w,])
-        #         colnames(test_RCT) <- colnames(test_Obs) <- c("A",paste0("X",1:5))
-        #
-        #         new_data <- as.data.frame(
-        #             rbind(
-        #                 test_RCT,
-        #                 test_Obs
-        #             )
-        #         )
-        #         colnames(new_data) <- c("A",paste0("X",1:5))
-        #     }
-        #     else{
-        #         data_use <- as.data.frame(
-        #             rbind(
-        #                 cbind(obs.time[train], obs.event[train], rx[train], confounders[train,], RCT[RCT == 1][train]),
-        #                 cbind(dat$time[RCT == 0][train_w], dat$status[RCT == 0][train_w], A[RCT == 0][train_w], X[RCT == 0,][train_w,], RCT[RCT == 0][train_w])
-        #             )
-        #         )
-        #         colnames(data_use) <- c("time", "event", "A",paste0("X",1:5),"RCT")
-        #
-        #         fit <- coxph(Surv(time, event) ~ ., data = data_use[1:sum(train),] %>%
-        #                          select(-one_of("RCT")),weights = weigths_use)
-        #         new_data <- as.data.frame(
-        #             rbind(
-        #                 cbind(rx[test], confounders[test,]),
-        #                 cbind(A[RCT == 0][test_w], X[RCT == 0,][test_w,])
-        #             )
-        #         )
-        #         colnames(new_data) <- c("A",paste0("X",1:5))
-        #     }
-        #
-        #
-        #     predicted_0 <- survfit(fit, newdata = new_data %>% mutate(A = 0))
-        #     med_pred_0 <- c()
-        #     for(i in fit.times){
-        #         med_pred_0 <- c(med_pred_0, median(summary(predicted_0, times = i)$surv))
-        #     }
-        #     if(length(med_pred_0) < length(fit.times))
-        #         med_pred_0 <- c(med_pred_0, rep(0, length(fit.times) - length(med_pred_0)))
-        #     final_pred_0 <- rbind(final_pred_0, med_pred_0)
-        #     # final_pred_0 <- as_tibble(cbind(fit.times, med_pred_0,out_S0))
-        #     # colnames(final_pred_0) <- c('time','surv','true.surv')
-        #
-        #     predicted_1 <- survfit(fit, newdata = new_data  %>% mutate(A = 1))
-        #     med_pred_1 <- c()
-        #     for(i in fit.times){
-        #         med_pred_1 <- c(med_pred_1, median(summary(predicted_1, times = i)$surv))
-        #     }
-        #     if(length(med_pred_1) < length(fit.times))
-        #         med_pred_1 <- c(med_pred_1, rep(0, length(fit.times) - length(med_pred_1)))
-        #     final_pred_1 <- rbind(final_pred_1, med_pred_1)
-        #     # final_pred_1 <- as_tibble(cbind(fit.times, med_pred_1,out_S1))
-        #     # colnames(final_pred_1) <- c('time','surv','true.surv')
-        # }
-        #
-        # # merge results #
-        # final_pred_0_med <- apply(final_pred_0, 2, median)
-        # final_pred_1_med <- apply(final_pred_1, 2, median)
-        #
-        # final_pred_0 <- as_tibble(cbind(fit.times, final_pred_0_med,out_S0))
-        # colnames(final_pred_0) <- c('time','surv','true.surv')
-        # final_pred_1 <- as_tibble(cbind(fit.times, final_pred_1_med,out_S1))
-        # colnames(final_pred_1) <- c('time','surv','true.surv')
-
 
     }
 
@@ -1002,7 +370,8 @@ simul_coxph_weighted_causal <- function(N = 500, # n = 250,
 #                                lambda = lambda, rho = rho, rateC = rateC, s = s,
 #                                run_type = "incorrect",
 #                                surv_type = "exp",
-#                                misspe = misspe
+#                                misspe = misspe,
+#                                fit.times = fit.times
 # )
 #
 # ex_simul$Delta_0_bias[8]

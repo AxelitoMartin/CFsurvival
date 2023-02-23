@@ -1,7 +1,8 @@
 .estimate.conditional.survival <- function(Y, Delta, A, W, newW, fit.times, fit.treat, event.SL.library, cens.SL.library, survSL.control, survSL.cvControl, cens.trunc, verbose, save.fit,
-                                           W_c_test = NULL, treat_c_test = NULL) {
+                                           W_c_test = NULL, treat_c_test = NULL,s = 1) {
 
 
+    set.seed(s)
     ret <- list(fit.times=fit.times)
     AW <- cbind(A, W)
     if(0 %in% fit.treat & 1 %in% fit.treat) {

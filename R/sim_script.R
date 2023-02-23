@@ -3,9 +3,7 @@
 #' This function was used to create the simulation results.
 #' @export
 
-# library(CFsurvival)
-# library(dplyr)
-# rm(list=ls())
+
 
 # survival function generation #
 simulWeib <- function(N, lambda, rho, beta, rateC, X,s, interactions = NULL, A = NULL, covs_int = NULL)
@@ -13,9 +11,10 @@ simulWeib <- function(N, lambda, rho, beta, rateC, X,s, interactions = NULL, A =
     set.seed(s)
     if(is.null(interactions))
         interactions = rep(0,ncol(X)-1)
+    if(is.null(covs_int))
+        covs_int <- 0
     # Weibull latent event times
     v <- runif(n=N)
-    # if(!is.null(dim(covs_int)))
     Tlat <- (- log(v) / (lambda * exp(X %*% beta + A*covs_int %*% interactions)))^(1 / rho)
     # else
     #     Tlat <- (- log(v) / (lambda * exp(X * beta + A*X * interactions )))^(1 / rho)
@@ -36,6 +35,15 @@ simulWeib <- function(N, lambda, rho, beta, rateC, X,s, interactions = NULL, A =
 }
 
 #####
+
+#' simulation script
+#'
+#' This function was used to create the simulation results.
+#' @export
+#' @import
+#' dplyr
+#' survival
+
 simul_DML_causal <- function(N = 500, # n = 250,
                              X,
                              beta_R, # = runif(n=covs,-1,1),
@@ -49,11 +57,11 @@ simul_DML_causal <- function(N = 500, # n = 250,
                              lambda = 0.1, rho = 2, rateC = 0.05,s = 210793, quants = c(0.75,0.5,0.25),
                              # parameters for interactions #
                              misspe = "",
-                             beta_interactions = NULL, run_type = "correct", surv_type = "exp",
+                             beta_interactions = NULL, run_type = "correct", surv_type = "exp", cov_int = NULL,
                              betaT = 1, lambdaT = 5, betaC = 2, lambdaC = 10, fit.times = seq(0, 10, by=0.1)
 ){
 
-    library(dplyr)
+    # library(dplyr)
     set.seed(s)
     expit <- function(x,beta,int = 0) 1/(1 + exp(-x %*% beta)+int)
     covs <- ncol(X)
@@ -305,7 +313,7 @@ simul_DML_causal <- function(N = 500, # n = 250,
 
 }
 
-#
+
 # rm(list=ls())
 # # N = 1000
 # # covs <- c(5)

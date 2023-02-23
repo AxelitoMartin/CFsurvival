@@ -1,0 +1,3567 @@
+
+R version 3.6.3 (2020-02-29) -- "Holding the Windsock"
+Copyright (C) 2020 The R Foundation for Statistical Computing
+Platform: x86_64-pc-linux-gnu (64-bit)
+
+R is free software and comes with ABSOLUTELY NO WARRANTY.
+You are welcome to redistribute it under certain conditions.
+Type 'license()' or 'licence()' for distribution details.
+
+  Natural language support but running in an English locale
+
+R is a collaborative project with many contributors.
+Type 'contributors()' for more information and
+'citation()' on how to cite R or R packages in publications.
+
+Type 'demo()' for some demos, 'help()' for on-line help, or
+'help.start()' for an HTML browser interface to help.
+Type 'q()' to quit R.
+
+[Previously saved workspace restored]
+
+> # remotes::install_github("AxelitoMartin/CFsurvival")
+> rm(list=ls())
+> library(CFsurvival)
+> library(dplyr)
+
+Attaching package: ‘dplyr’
+
+The following objects are masked from ‘package:stats’:
+
+    filter, lag
+
+The following objects are masked from ‘package:base’:
+
+    intersect, setdiff, setequal, union
+
+> library(haven)
+> library(tibble)
+> library(gtsummary)
+> library(fastDummies)
+> 
+> # load WHI data #
+> whi_ct <- as_tibble(read_dta("~/Causal/WHI_CT.dta")) %>% mutate(RCT = 1)
+> whi_os <- as_tibble(read_dta("~/Causal/WHI_OS.dta")) %>% mutate(RCT = 0)
+> keep <- intersect(colnames(whi_ct),colnames(whi_os))
+> whi_dat <- rbind(whi_ct %>%  select(keep),
++                  whi_os %>%  select(keep)) %>%
++     column_to_rownames("id")
+Note: Using an external vector in selections is ambiguous.
+ℹ Use `all_of(keep)` instead of `keep` to silence this message.
+ℹ See <https://tidyselect.r-lib.org/reference/faq-external-vector.html>.
+This message is displayed once per session.
+> 
+> sum(whi_ct$chd_failure)
+[1] 284
+> dim(whi_dat)
+[1] 73507    31
+> head(whi_dat)
+       syst chd_failure time_to_chd HT_intervention age agefbir angina aortican
+500001   90           0        2100               1  68       2      0        0
+500025  109           0        2100               1  55       2      0        0
+500042  104           0        2100               1  54       2      0        0
+500066  144           0        2100               0  54       1      0        0
+500072  130           0        2100               0  54       1      0        0
+500127  101           0        2100               1  58      NA      0        0
+       atrialfb     bmix  bmix_bl booph cabg cardrest cigsday cvd diabtrt dias
+500001        0 19.20175 20.70313     0    0       NA       5   0       0   62
+500025        0 23.07507 22.57050     0    0       NA       0   0       0   63
+500042        0 36.29460 38.52147     0    0       NA       0   0       0   60
+500066        0 38.29634 36.79474     0    0       NA       0   0       1   67
+500072        0 33.24661 28.41658     0    0       NA       5   0       0   70
+500127        0 31.72199 30.97214     0    0       NA       0   0       0   60
+       dias_bl dvt ethnic hicholrp hip55 hyptpill mi numfalls parity stroke
+500001      70   0      1        0     0       NA  0        0      5      0
+500025      72   0      1        0     0       NA  0        1      3      0
+500042      85   0      1        0    NA       NA  0        0      2      0
+500066      74   0      1        0    NA       NA  0        2      4      0
+500072      76   0      1        0    NA        0  0        0      6      0
+500127      79   0      3        0     0       NA  0        0      3      0
+       syst_bl time_since_menopause RCT
+500001     105                   14   1
+500025     113                    5   1
+500042     118                    4   1
+500066     124                    6   1
+500072     125                    4   1
+500127     115                    6   1
+> colnames(whi_dat)
+ [1] "syst"                 "chd_failure"          "time_to_chd"         
+ [4] "HT_intervention"      "age"                  "agefbir"             
+ [7] "angina"               "aortican"             "atrialfb"            
+[10] "bmix"                 "bmix_bl"              "booph"               
+[13] "cabg"                 "cardrest"             "cigsday"             
+[16] "cvd"                  "diabtrt"              "dias"                
+[19] "dias_bl"              "dvt"                  "ethnic"              
+[22] "hicholrp"             "hip55"                "hyptpill"            
+[25] "mi"                   "numfalls"             "parity"              
+[28] "stroke"               "syst_bl"              "time_since_menopause"
+[31] "RCT"                 
+> 
+> apply(whi_dat, 2, function(x) sum(is.na(x)))
+                syst          chd_failure          time_to_chd 
+                1075                    0                    0 
+     HT_intervention                  age              agefbir 
+                   0                    0                13339 
+              angina             aortican             atrialfb 
+                 369                  913                  965 
+                bmix              bmix_bl                booph 
+                 602                  609                  933 
+                cabg             cardrest              cigsday 
+                 904                60708                    0 
+                 cvd              diabtrt                 dias 
+                2430                   69                 1072 
+             dias_bl                  dvt               ethnic 
+                  51                   42                  170 
+            hicholrp                hip55             hyptpill 
+                2579                17553                51544 
+                  mi             numfalls               parity 
+                  45                 1623                  391 
+              stroke              syst_bl time_since_menopause 
+                  30                   51                 3283 
+                 RCT 
+                   0 
+> whi_dat <- whi_dat %>%
++     select(-one_of("syst","hyptpill","cardrest","hip55","agefbir"))
+> whi_dat_comp <- whi_dat[complete.cases(whi_dat),]
+> dim(whi_dat_comp)
+[1] 64596    26
+> 
+> # whi_dat %>%
+> #   tbl_summary()
+> 
+> # change categorical variables written as numeric factors to dummy variables #
+> dums <- c("ethnic")
+> tmp <- whi_dat_comp %>%
++     select(dums) %>%
++     mutate_all(as.character) %>%
++     fastDummies::dummy_cols(remove_first_dummy = T) %>%
++     select(-one_of(dums))
+Note: Using an external vector in selections is ambiguous.
+ℹ Use `all_of(dums)` instead of `dums` to silence this message.
+ℹ See <https://tidyselect.r-lib.org/reference/faq-external-vector.html>.
+This message is displayed once per session.
+> whi_dat_comp <- as.data.frame(cbind(
++     whi_dat_comp %>% select(-one_of(dums)),
++     tmp
++ ) %>% mutate_all(as.character) %>%
++     mutate_all(as.numeric)
++ )
+> 
+> 
+> whi_dat_comp %>%
++     tbl_summary(by = RCT) %>%
++     add_p() %>%
++     bold_labels()
+<div id="wznmmsljnt" style="padding-left:0px;padding-right:0px;padding-top:10px;padding-bottom:10px;overflow-x:auto;overflow-y:auto;width:auto;height:auto;">
+  <style>html {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Helvetica Neue', 'Fira Sans', 'Droid Sans', Arial, sans-serif;
+}
+
+#wznmmsljnt .gt_table {
+  display: table;
+  border-collapse: collapse;
+  margin-left: auto;
+  margin-right: auto;
+  color: #333333;
+  font-size: 16px;
+  font-weight: normal;
+  font-style: normal;
+  background-color: #FFFFFF;
+  width: auto;
+  border-top-style: solid;
+  border-top-width: 2px;
+  border-top-color: #A8A8A8;
+  border-right-style: none;
+  border-right-width: 2px;
+  border-right-color: #D3D3D3;
+  border-bottom-style: solid;
+  border-bottom-width: 2px;
+  border-bottom-color: #A8A8A8;
+  border-left-style: none;
+  border-left-width: 2px;
+  border-left-color: #D3D3D3;
+}
+
+#wznmmsljnt .gt_heading {
+  background-color: #FFFFFF;
+  text-align: center;
+  border-bottom-color: #FFFFFF;
+  border-left-style: none;
+  border-left-width: 1px;
+  border-left-color: #D3D3D3;
+  border-right-style: none;
+  border-right-width: 1px;
+  border-right-color: #D3D3D3;
+}
+
+#wznmmsljnt .gt_caption {
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
+#wznmmsljnt .gt_title {
+  color: #333333;
+  font-size: 125%;
+  font-weight: initial;
+  padding-top: 4px;
+  padding-bottom: 4px;
+  padding-left: 5px;
+  padding-right: 5px;
+  border-bottom-color: #FFFFFF;
+  border-bottom-width: 0;
+}
+
+#wznmmsljnt .gt_subtitle {
+  color: #333333;
+  font-size: 85%;
+  font-weight: initial;
+  padding-top: 0;
+  padding-bottom: 6px;
+  padding-left: 5px;
+  padding-right: 5px;
+  border-top-color: #FFFFFF;
+  border-top-width: 0;
+}
+
+#wznmmsljnt .gt_bottom_border {
+  border-bottom-style: solid;
+  border-bottom-width: 2px;
+  border-bottom-color: #D3D3D3;
+}
+
+#wznmmsljnt .gt_col_headings {
+  border-top-style: solid;
+  border-top-width: 2px;
+  border-top-color: #D3D3D3;
+  border-bottom-style: solid;
+  border-bottom-width: 2px;
+  border-bottom-color: #D3D3D3;
+  border-left-style: none;
+  border-left-width: 1px;
+  border-left-color: #D3D3D3;
+  border-right-style: none;
+  border-right-width: 1px;
+  border-right-color: #D3D3D3;
+}
+
+#wznmmsljnt .gt_col_heading {
+  color: #333333;
+  background-color: #FFFFFF;
+  font-size: 100%;
+  font-weight: normal;
+  text-transform: inherit;
+  border-left-style: none;
+  border-left-width: 1px;
+  border-left-color: #D3D3D3;
+  border-right-style: none;
+  border-right-width: 1px;
+  border-right-color: #D3D3D3;
+  vertical-align: bottom;
+  padding-top: 5px;
+  padding-bottom: 6px;
+  padding-left: 5px;
+  padding-right: 5px;
+  overflow-x: hidden;
+}
+
+#wznmmsljnt .gt_column_spanner_outer {
+  color: #333333;
+  background-color: #FFFFFF;
+  font-size: 100%;
+  font-weight: normal;
+  text-transform: inherit;
+  padding-top: 0;
+  padding-bottom: 0;
+  padding-left: 4px;
+  padding-right: 4px;
+}
+
+#wznmmsljnt .gt_column_spanner_outer:first-child {
+  padding-left: 0;
+}
+
+#wznmmsljnt .gt_column_spanner_outer:last-child {
+  padding-right: 0;
+}
+
+#wznmmsljnt .gt_column_spanner {
+  border-bottom-style: solid;
+  border-bottom-width: 2px;
+  border-bottom-color: #D3D3D3;
+  vertical-align: bottom;
+  padding-top: 5px;
+  padding-bottom: 5px;
+  overflow-x: hidden;
+  display: inline-block;
+  width: 100%;
+}
+
+#wznmmsljnt .gt_group_heading {
+  padding-top: 8px;
+  padding-bottom: 8px;
+  padding-left: 5px;
+  padding-right: 5px;
+  color: #333333;
+  background-color: #FFFFFF;
+  font-size: 100%;
+  font-weight: initial;
+  text-transform: inherit;
+  border-top-style: solid;
+  border-top-width: 2px;
+  border-top-color: #D3D3D3;
+  border-bottom-style: solid;
+  border-bottom-width: 2px;
+  border-bottom-color: #D3D3D3;
+  border-left-style: none;
+  border-left-width: 1px;
+  border-left-color: #D3D3D3;
+  border-right-style: none;
+  border-right-width: 1px;
+  border-right-color: #D3D3D3;
+  vertical-align: middle;
+  text-align: left;
+}
+
+#wznmmsljnt .gt_empty_group_heading {
+  padding: 0.5px;
+  color: #333333;
+  background-color: #FFFFFF;
+  font-size: 100%;
+  font-weight: initial;
+  border-top-style: solid;
+  border-top-width: 2px;
+  border-top-color: #D3D3D3;
+  border-bottom-style: solid;
+  border-bottom-width: 2px;
+  border-bottom-color: #D3D3D3;
+  vertical-align: middle;
+}
+
+#wznmmsljnt .gt_from_md > :first-child {
+  margin-top: 0;
+}
+
+#wznmmsljnt .gt_from_md > :last-child {
+  margin-bottom: 0;
+}
+
+#wznmmsljnt .gt_row {
+  padding-top: 8px;
+  padding-bottom: 8px;
+  padding-left: 5px;
+  padding-right: 5px;
+  margin: 10px;
+  border-top-style: solid;
+  border-top-width: 1px;
+  border-top-color: #D3D3D3;
+  border-left-style: none;
+  border-left-width: 1px;
+  border-left-color: #D3D3D3;
+  border-right-style: none;
+  border-right-width: 1px;
+  border-right-color: #D3D3D3;
+  vertical-align: middle;
+  overflow-x: hidden;
+}
+
+#wznmmsljnt .gt_stub {
+  color: #333333;
+  background-color: #FFFFFF;
+  font-size: 100%;
+  font-weight: initial;
+  text-transform: inherit;
+  border-right-style: solid;
+  border-right-width: 2px;
+  border-right-color: #D3D3D3;
+  padding-left: 5px;
+  padding-right: 5px;
+}
+
+#wznmmsljnt .gt_stub_row_group {
+  color: #333333;
+  background-color: #FFFFFF;
+  font-size: 100%;
+  font-weight: initial;
+  text-transform: inherit;
+  border-right-style: solid;
+  border-right-width: 2px;
+  border-right-color: #D3D3D3;
+  padding-left: 5px;
+  padding-right: 5px;
+  vertical-align: top;
+}
+
+#wznmmsljnt .gt_row_group_first td {
+  border-top-width: 2px;
+}
+
+#wznmmsljnt .gt_summary_row {
+  color: #333333;
+  background-color: #FFFFFF;
+  text-transform: inherit;
+  padding-top: 8px;
+  padding-bottom: 8px;
+  padding-left: 5px;
+  padding-right: 5px;
+}
+
+#wznmmsljnt .gt_first_summary_row {
+  border-top-style: solid;
+  border-top-color: #D3D3D3;
+}
+
+#wznmmsljnt .gt_first_summary_row.thick {
+  border-top-width: 2px;
+}
+
+#wznmmsljnt .gt_last_summary_row {
+  padding-top: 8px;
+  padding-bottom: 8px;
+  padding-left: 5px;
+  padding-right: 5px;
+  border-bottom-style: solid;
+  border-bottom-width: 2px;
+  border-bottom-color: #D3D3D3;
+}
+
+#wznmmsljnt .gt_grand_summary_row {
+  color: #333333;
+  background-color: #FFFFFF;
+  text-transform: inherit;
+  padding-top: 8px;
+  padding-bottom: 8px;
+  padding-left: 5px;
+  padding-right: 5px;
+}
+
+#wznmmsljnt .gt_first_grand_summary_row {
+  padding-top: 8px;
+  padding-bottom: 8px;
+  padding-left: 5px;
+  padding-right: 5px;
+  border-top-style: double;
+  border-top-width: 6px;
+  border-top-color: #D3D3D3;
+}
+
+#wznmmsljnt .gt_striped {
+  background-color: rgba(128, 128, 128, 0.05);
+}
+
+#wznmmsljnt .gt_table_body {
+  border-top-style: solid;
+  border-top-width: 2px;
+  border-top-color: #D3D3D3;
+  border-bottom-style: solid;
+  border-bottom-width: 2px;
+  border-bottom-color: #D3D3D3;
+}
+
+#wznmmsljnt .gt_footnotes {
+  color: #333333;
+  background-color: #FFFFFF;
+  border-bottom-style: none;
+  border-bottom-width: 2px;
+  border-bottom-color: #D3D3D3;
+  border-left-style: none;
+  border-left-width: 2px;
+  border-left-color: #D3D3D3;
+  border-right-style: none;
+  border-right-width: 2px;
+  border-right-color: #D3D3D3;
+}
+
+#wznmmsljnt .gt_footnote {
+  margin: 0px;
+  font-size: 90%;
+  padding-left: 4px;
+  padding-right: 4px;
+  padding-left: 5px;
+  padding-right: 5px;
+}
+
+#wznmmsljnt .gt_sourcenotes {
+  color: #333333;
+  background-color: #FFFFFF;
+  border-bottom-style: none;
+  border-bottom-width: 2px;
+  border-bottom-color: #D3D3D3;
+  border-left-style: none;
+  border-left-width: 2px;
+  border-left-color: #D3D3D3;
+  border-right-style: none;
+  border-right-width: 2px;
+  border-right-color: #D3D3D3;
+}
+
+#wznmmsljnt .gt_sourcenote {
+  font-size: 90%;
+  padding-top: 4px;
+  padding-bottom: 4px;
+  padding-left: 5px;
+  padding-right: 5px;
+}
+
+#wznmmsljnt .gt_left {
+  text-align: left;
+}
+
+#wznmmsljnt .gt_center {
+  text-align: center;
+}
+
+#wznmmsljnt .gt_right {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+#wznmmsljnt .gt_font_normal {
+  font-weight: normal;
+}
+
+#wznmmsljnt .gt_font_bold {
+  font-weight: bold;
+}
+
+#wznmmsljnt .gt_font_italic {
+  font-style: italic;
+}
+
+#wznmmsljnt .gt_super {
+  font-size: 65%;
+}
+
+#wznmmsljnt .gt_footnote_marks {
+  font-style: italic;
+  font-weight: normal;
+  font-size: 75%;
+  vertical-align: 0.4em;
+}
+
+#wznmmsljnt .gt_asterisk {
+  font-size: 100%;
+  vertical-align: 0;
+}
+
+#wznmmsljnt .gt_indent_1 {
+  text-indent: 5px;
+}
+
+#wznmmsljnt .gt_indent_2 {
+  text-indent: 10px;
+}
+
+#wznmmsljnt .gt_indent_3 {
+  text-indent: 15px;
+}
+
+#wznmmsljnt .gt_indent_4 {
+  text-indent: 20px;
+}
+
+#wznmmsljnt .gt_indent_5 {
+  text-indent: 25px;
+}
+</style>
+  <table class="gt_table">
+  
+  <thead class="gt_col_headings">
+    <tr>
+      <th class="gt_col_heading gt_columns_bottom_border gt_left" rowspan="1" colspan="1" scope="col" id="&lt;strong&gt;Characteristic&lt;/strong&gt;"><strong>Characteristic</strong></th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_center" rowspan="1" colspan="1" scope="col" id="&lt;strong&gt;0&lt;/strong&gt;, N = 50,610&lt;sup class=&quot;gt_footnote_marks&quot;&gt;1&lt;/sup&gt;"><strong>0</strong>, N = 50,610<sup class="gt_footnote_marks">1</sup></th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_center" rowspan="1" colspan="1" scope="col" id="&lt;strong&gt;1&lt;/strong&gt;, N = 13,986&lt;sup class=&quot;gt_footnote_marks&quot;&gt;1&lt;/sup&gt;"><strong>1</strong>, N = 13,986<sup class="gt_footnote_marks">1</sup></th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_center" rowspan="1" colspan="1" scope="col" id="&lt;strong&gt;p-value&lt;/strong&gt;&lt;sup class=&quot;gt_footnote_marks&quot;&gt;2&lt;/sup&gt;"><strong>p-value</strong><sup class="gt_footnote_marks">2</sup></th>
+    </tr>
+  </thead>
+  <tbody class="gt_table_body">
+    <tr><td headers="label" class="gt_row gt_left" style="font-weight: bold;">chd_failure</td>
+<td headers="stat_1" class="gt_row gt_center">556 (1.1%)</td>
+<td headers="stat_2" class="gt_row gt_center">247 (1.8%)</td>
+<td headers="p.value" class="gt_row gt_center"><0.001</td></tr>
+    <tr><td headers="label" class="gt_row gt_left" style="font-weight: bold;">time_to_chd</td>
+<td headers="stat_1" class="gt_row gt_center">3,266 (2,905, 3,626)</td>
+<td headers="stat_2" class="gt_row gt_center">2,100 (2,100, 2,100)</td>
+<td headers="p.value" class="gt_row gt_center"><0.001</td></tr>
+    <tr><td headers="label" class="gt_row gt_left" style="font-weight: bold;">HT_intervention</td>
+<td headers="stat_1" class="gt_row gt_center">17,104 (34%)</td>
+<td headers="stat_2" class="gt_row gt_center">7,044 (50%)</td>
+<td headers="p.value" class="gt_row gt_center"><0.001</td></tr>
+    <tr><td headers="label" class="gt_row gt_left" style="font-weight: bold;">age</td>
+<td headers="stat_1" class="gt_row gt_center">62 (57, 68)</td>
+<td headers="stat_2" class="gt_row gt_center">63 (58, 69)</td>
+<td headers="p.value" class="gt_row gt_center"><0.001</td></tr>
+    <tr><td headers="label" class="gt_row gt_left" style="font-weight: bold;">angina</td>
+<td headers="stat_1" class="gt_row gt_center">2,274 (4.5%)</td>
+<td headers="stat_2" class="gt_row gt_center">565 (4.0%)</td>
+<td headers="p.value" class="gt_row gt_center">0.021</td></tr>
+    <tr><td headers="label" class="gt_row gt_left" style="font-weight: bold;">aortican</td>
+<td headers="stat_1" class="gt_row gt_center">43 (&lt;0.1%)</td>
+<td headers="stat_2" class="gt_row gt_center">23 (0.2%)</td>
+<td headers="p.value" class="gt_row gt_center">0.009</td></tr>
+    <tr><td headers="label" class="gt_row gt_left" style="font-weight: bold;">atrialfb</td>
+<td headers="stat_1" class="gt_row gt_center">1,938 (3.8%)</td>
+<td headers="stat_2" class="gt_row gt_center">356 (2.5%)</td>
+<td headers="p.value" class="gt_row gt_center"><0.001</td></tr>
+    <tr><td headers="label" class="gt_row gt_left" style="font-weight: bold;">bmix</td>
+<td headers="stat_1" class="gt_row gt_center">26.1 (23.3, 29.9)</td>
+<td headers="stat_2" class="gt_row gt_center">27.8 (24.5, 32.1)</td>
+<td headers="p.value" class="gt_row gt_center"><0.001</td></tr>
+    <tr><td headers="label" class="gt_row gt_left" style="font-weight: bold;">bmix_bl</td>
+<td headers="stat_1" class="gt_row gt_center">25.7 (23.0, 29.4)</td>
+<td headers="stat_2" class="gt_row gt_center">27.6 (24.2, 31.8)</td>
+<td headers="p.value" class="gt_row gt_center"><0.001</td></tr>
+    <tr><td headers="label" class="gt_row gt_left" style="font-weight: bold;">booph</td>
+<td headers="stat_1" class="gt_row gt_center">10,710 (21%)</td>
+<td headers="stat_2" class="gt_row gt_center">46 (0.3%)</td>
+<td headers="p.value" class="gt_row gt_center"><0.001</td></tr>
+    <tr><td headers="label" class="gt_row gt_left" style="font-weight: bold;">cabg</td>
+<td headers="stat_1" class="gt_row gt_center">316 (0.6%)</td>
+<td headers="stat_2" class="gt_row gt_center">110 (0.8%)</td>
+<td headers="p.value" class="gt_row gt_center">0.036</td></tr>
+    <tr><td headers="label" class="gt_row gt_left" style="font-weight: bold;">cigsday</td>
+<td headers="stat_1" class="gt_row gt_center"></td>
+<td headers="stat_2" class="gt_row gt_center"></td>
+<td headers="p.value" class="gt_row gt_center"><0.001</td></tr>
+    <tr><td headers="label" class="gt_row gt_left">    0</td>
+<td headers="stat_1" class="gt_row gt_center">26,899 (53%)</td>
+<td headers="stat_2" class="gt_row gt_center">7,221 (52%)</td>
+<td headers="p.value" class="gt_row gt_center"></td></tr>
+    <tr><td headers="label" class="gt_row gt_left">    1</td>
+<td headers="stat_1" class="gt_row gt_center">1,174 (2.3%)</td>
+<td headers="stat_2" class="gt_row gt_center">296 (2.1%)</td>
+<td headers="p.value" class="gt_row gt_center"></td></tr>
+    <tr><td headers="label" class="gt_row gt_left">    2</td>
+<td headers="stat_1" class="gt_row gt_center">4,557 (9.0%)</td>
+<td headers="stat_2" class="gt_row gt_center">1,099 (7.9%)</td>
+<td headers="p.value" class="gt_row gt_center"></td></tr>
+    <tr><td headers="label" class="gt_row gt_left">    3</td>
+<td headers="stat_1" class="gt_row gt_center">7,471 (15%)</td>
+<td headers="stat_2" class="gt_row gt_center">2,134 (15%)</td>
+<td headers="p.value" class="gt_row gt_center"></td></tr>
+    <tr><td headers="label" class="gt_row gt_left">    4</td>
+<td headers="stat_1" class="gt_row gt_center">6,495 (13%)</td>
+<td headers="stat_2" class="gt_row gt_center">2,005 (14%)</td>
+<td headers="p.value" class="gt_row gt_center"></td></tr>
+    <tr><td headers="label" class="gt_row gt_left">    5</td>
+<td headers="stat_1" class="gt_row gt_center">2,107 (4.2%)</td>
+<td headers="stat_2" class="gt_row gt_center">644 (4.6%)</td>
+<td headers="p.value" class="gt_row gt_center"></td></tr>
+    <tr><td headers="label" class="gt_row gt_left">    6</td>
+<td headers="stat_1" class="gt_row gt_center">1,322 (2.6%)</td>
+<td headers="stat_2" class="gt_row gt_center">397 (2.8%)</td>
+<td headers="p.value" class="gt_row gt_center"></td></tr>
+    <tr><td headers="label" class="gt_row gt_left">    7</td>
+<td headers="stat_1" class="gt_row gt_center">585 (1.2%)</td>
+<td headers="stat_2" class="gt_row gt_center">190 (1.4%)</td>
+<td headers="p.value" class="gt_row gt_center"></td></tr>
+    <tr><td headers="label" class="gt_row gt_left" style="font-weight: bold;">cvd</td>
+<td headers="stat_1" class="gt_row gt_center">8,378 (17%)</td>
+<td headers="stat_2" class="gt_row gt_center">1,653 (12%)</td>
+<td headers="p.value" class="gt_row gt_center"><0.001</td></tr>
+    <tr><td headers="label" class="gt_row gt_left" style="font-weight: bold;">diabtrt</td>
+<td headers="stat_1" class="gt_row gt_center">1,223 (2.4%)</td>
+<td headers="stat_2" class="gt_row gt_center">616 (4.4%)</td>
+<td headers="p.value" class="gt_row gt_center"><0.001</td></tr>
+    <tr><td headers="label" class="gt_row gt_left" style="font-weight: bold;">dias</td>
+<td headers="stat_1" class="gt_row gt_center">73 (68, 80)</td>
+<td headers="stat_2" class="gt_row gt_center">71 (65, 78)</td>
+<td headers="p.value" class="gt_row gt_center"><0.001</td></tr>
+    <tr><td headers="label" class="gt_row gt_left" style="font-weight: bold;">dias_bl</td>
+<td headers="stat_1" class="gt_row gt_center">74 (69, 80)</td>
+<td headers="stat_2" class="gt_row gt_center">76 (70, 81)</td>
+<td headers="p.value" class="gt_row gt_center"><0.001</td></tr>
+    <tr><td headers="label" class="gt_row gt_left" style="font-weight: bold;">dvt</td>
+<td headers="stat_1" class="gt_row gt_center">1,722 (3.4%)</td>
+<td headers="stat_2" class="gt_row gt_center">82 (0.6%)</td>
+<td headers="p.value" class="gt_row gt_center"><0.001</td></tr>
+    <tr><td headers="label" class="gt_row gt_left" style="font-weight: bold;">hicholrp</td>
+<td headers="stat_1" class="gt_row gt_center">6,960 (14%)</td>
+<td headers="stat_2" class="gt_row gt_center">1,754 (13%)</td>
+<td headers="p.value" class="gt_row gt_center"><0.001</td></tr>
+    <tr><td headers="label" class="gt_row gt_left" style="font-weight: bold;">mi</td>
+<td headers="stat_1" class="gt_row gt_center">822 (1.6%)</td>
+<td headers="stat_2" class="gt_row gt_center">248 (1.8%)</td>
+<td headers="p.value" class="gt_row gt_center">0.2</td></tr>
+    <tr><td headers="label" class="gt_row gt_left" style="font-weight: bold;">numfalls</td>
+<td headers="stat_1" class="gt_row gt_center"></td>
+<td headers="stat_2" class="gt_row gt_center"></td>
+<td headers="p.value" class="gt_row gt_center">0.8</td></tr>
+    <tr><td headers="label" class="gt_row gt_left">    0</td>
+<td headers="stat_1" class="gt_row gt_center">34,291 (68%)</td>
+<td headers="stat_2" class="gt_row gt_center">9,514 (68%)</td>
+<td headers="p.value" class="gt_row gt_center"></td></tr>
+    <tr><td headers="label" class="gt_row gt_left">    1</td>
+<td headers="stat_1" class="gt_row gt_center">10,197 (20%)</td>
+<td headers="stat_2" class="gt_row gt_center">2,785 (20%)</td>
+<td headers="p.value" class="gt_row gt_center"></td></tr>
+    <tr><td headers="label" class="gt_row gt_left">    2</td>
+<td headers="stat_1" class="gt_row gt_center">4,109 (8.1%)</td>
+<td headers="stat_2" class="gt_row gt_center">1,117 (8.0%)</td>
+<td headers="p.value" class="gt_row gt_center"></td></tr>
+    <tr><td headers="label" class="gt_row gt_left">    3</td>
+<td headers="stat_1" class="gt_row gt_center">2,013 (4.0%)</td>
+<td headers="stat_2" class="gt_row gt_center">570 (4.1%)</td>
+<td headers="p.value" class="gt_row gt_center"></td></tr>
+    <tr><td headers="label" class="gt_row gt_left" style="font-weight: bold;">parity</td>
+<td headers="stat_1" class="gt_row gt_center"></td>
+<td headers="stat_2" class="gt_row gt_center"></td>
+<td headers="p.value" class="gt_row gt_center"><0.001</td></tr>
+    <tr><td headers="label" class="gt_row gt_left">    0</td>
+<td headers="stat_1" class="gt_row gt_center">5,046 (10.0%)</td>
+<td headers="stat_2" class="gt_row gt_center">1,095 (7.8%)</td>
+<td headers="p.value" class="gt_row gt_center"></td></tr>
+    <tr><td headers="label" class="gt_row gt_left">    1</td>
+<td headers="stat_1" class="gt_row gt_center">1,318 (2.6%)</td>
+<td headers="stat_2" class="gt_row gt_center">333 (2.4%)</td>
+<td headers="p.value" class="gt_row gt_center"></td></tr>
+    <tr><td headers="label" class="gt_row gt_left">    2</td>
+<td headers="stat_1" class="gt_row gt_center">4,438 (8.8%)</td>
+<td headers="stat_2" class="gt_row gt_center">1,133 (8.1%)</td>
+<td headers="p.value" class="gt_row gt_center"></td></tr>
+    <tr><td headers="label" class="gt_row gt_left">    3</td>
+<td headers="stat_1" class="gt_row gt_center">13,769 (27%)</td>
+<td headers="stat_2" class="gt_row gt_center">3,073 (22%)</td>
+<td headers="p.value" class="gt_row gt_center"></td></tr>
+    <tr><td headers="label" class="gt_row gt_left">    4</td>
+<td headers="stat_1" class="gt_row gt_center">12,707 (25%)</td>
+<td headers="stat_2" class="gt_row gt_center">3,328 (24%)</td>
+<td headers="p.value" class="gt_row gt_center"></td></tr>
+    <tr><td headers="label" class="gt_row gt_left">    5</td>
+<td headers="stat_1" class="gt_row gt_center">7,384 (15%)</td>
+<td headers="stat_2" class="gt_row gt_center">2,420 (17%)</td>
+<td headers="p.value" class="gt_row gt_center"></td></tr>
+    <tr><td headers="label" class="gt_row gt_left">    6</td>
+<td headers="stat_1" class="gt_row gt_center">5,948 (12%)</td>
+<td headers="stat_2" class="gt_row gt_center">2,604 (19%)</td>
+<td headers="p.value" class="gt_row gt_center"></td></tr>
+    <tr><td headers="label" class="gt_row gt_left" style="font-weight: bold;">stroke</td>
+<td headers="stat_1" class="gt_row gt_center">476 (0.9%)</td>
+<td headers="stat_2" class="gt_row gt_center">113 (0.8%)</td>
+<td headers="p.value" class="gt_row gt_center">0.14</td></tr>
+    <tr><td headers="label" class="gt_row gt_left" style="font-weight: bold;">syst_bl</td>
+<td headers="stat_1" class="gt_row gt_center">123 (112, 135)</td>
+<td headers="stat_2" class="gt_row gt_center">126 (115, 138)</td>
+<td headers="p.value" class="gt_row gt_center"><0.001</td></tr>
+    <tr><td headers="label" class="gt_row gt_left" style="font-weight: bold;">time_since_menopause</td>
+<td headers="stat_1" class="gt_row gt_center">13 (7, 20)</td>
+<td headers="stat_2" class="gt_row gt_center">13 (7, 19)</td>
+<td headers="p.value" class="gt_row gt_center"><0.001</td></tr>
+    <tr><td headers="label" class="gt_row gt_left" style="font-weight: bold;">ethnic_2</td>
+<td headers="stat_1" class="gt_row gt_center">2,581 (5.1%)</td>
+<td headers="stat_2" class="gt_row gt_center">908 (6.5%)</td>
+<td headers="p.value" class="gt_row gt_center"><0.001</td></tr>
+    <tr><td headers="label" class="gt_row gt_left" style="font-weight: bold;">ethnic_3</td>
+<td headers="stat_1" class="gt_row gt_center">1,225 (2.4%)</td>
+<td headers="stat_2" class="gt_row gt_center">688 (4.9%)</td>
+<td headers="p.value" class="gt_row gt_center"><0.001</td></tr>
+    <tr><td headers="label" class="gt_row gt_left" style="font-weight: bold;">ethnic_4</td>
+<td headers="stat_1" class="gt_row gt_center">159 (0.3%)</td>
+<td headers="stat_2" class="gt_row gt_center">45 (0.3%)</td>
+<td headers="p.value" class="gt_row gt_center">0.9</td></tr>
+    <tr><td headers="label" class="gt_row gt_left" style="font-weight: bold;">ethnic_5</td>
+<td headers="stat_1" class="gt_row gt_center">1,104 (2.2%)</td>
+<td headers="stat_2" class="gt_row gt_center">333 (2.4%)</td>
+<td headers="p.value" class="gt_row gt_center">0.2</td></tr>
+    <tr><td headers="label" class="gt_row gt_left" style="font-weight: bold;">ethnic_6</td>
+<td headers="stat_1" class="gt_row gt_center">485 (1.0%)</td>
+<td headers="stat_2" class="gt_row gt_center">167 (1.2%)</td>
+<td headers="p.value" class="gt_row gt_center">0.014</td></tr>
+  </tbody>
+  
+  <tfoot class="gt_footnotes">
+    <tr>
+      <td class="gt_footnote" colspan="4"><sup class="gt_footnote_marks">1</sup> n (%); Median (IQR)</td>
+    </tr>
+    <tr>
+      <td class="gt_footnote" colspan="4"><sup class="gt_footnote_marks">2</sup> Pearson's Chi-squared test; Wilcoxon rank sum test</td>
+    </tr>
+  </tfoot>
+</table>
+</div>
+> 
+> # make data for the CF survival run #
+> 
+> # data #
+> obs.time <- whi_dat_comp$time_to_chd[whi_dat_comp$RCT == 1]
+> obs.event <- whi_dat_comp$chd_failure[whi_dat_comp$RCT == 1]
+> rx <- whi_dat_comp$HT_intervention[whi_dat_comp$RCT == 1]
+> confounders <- as.data.frame(
++     whi_dat_comp %>%
++         filter(RCT == 1) %>%
++         select(-one_of(c("time_to_chd","chd_failure","HT_intervention","RCT","cvd")))
++ )
+> 
+> W_c <- as.data.frame(
++     whi_dat_comp %>%
++         filter(RCT == 0) %>%
++         select(-one_of(c("time_to_chd","chd_failure","HT_intervention","RCT","cvd")))
++ )
+> 
+> # data summary #
+> summary(obs.time) # lots of observations at the boundary
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+      1    2100    2100    1986    2100    2100 
+> summary(obs.event) # low amount of events
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+0.00000 0.00000 0.00000 0.01766 0.00000 1.00000 
+> summary(rx) # is random good
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+ 0.0000  0.0000  1.0000  0.5036  1.0000  1.0000 
+> summary(obs.time[rx == 1]) # lots of observations at the boundary
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+      3    2100    2100    1981    2100    2100 
+> summary(obs.event[rx == 1]) # low amount of events
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+0.00000 0.00000 0.00000 0.02016 0.00000 1.00000 
+> summary(rx) # is random good
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+ 0.0000  0.0000  1.0000  0.5036  1.0000  1.0000 
+> 
+> # parameters #
+> prop.RCT.SL.library = c("SL.glm","SL.rpart","SL.glmnet")
+> prop.SL.library = c("SL.mean")
+> event.SL.library = c( "survSL.coxph", "survSL.weibreg","survSL.rfsrc")
+> cens.SL.library = c("survSL.coxph", "survSL.weibreg","survSL.rfsrc")
+> # summary(obs.time)
+> fit.times <- seq(0,2150,150)
+> 
+> 
+> fit <- CFsurvival(time = obs.time, event = obs.event, treat = rx,
++                   confounders =  confounders, contrasts = NULL,
++                   verbose = FALSE, fit.times = fit.times,
++                   fit.treat = c(0,1),
++                   nuisance.options = list(
++                       prop.RCT.SL.library = prop.RCT.SL.library,
++                       prop.SL.library = prop.SL.library,
++                       event.SL.library = event.SL.library,
++                       cens.SL.library = cens.SL.library, verbose = T),
++                   W_c = W_c
++ )
+fit.times > max(time[event == 1]) removed.
+Loading required package: nnls
+Loading required package: gam
+Loading required package: splines
+Loading required package: foreach
+Loaded gam 1.20.1
+
+Super Learner
+Version: 2.0-28
+Package created on 2021-05-04
+
+Loading required namespace: glmnet
+Number of covariates in All is: 25
+CV SL.glm_All
+Loading required namespace: rpart
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Non-Negative log-likelihood convergence:  TRUE
+full SL.glm_All
+full SL.rpart_All
+full SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Non-Negative log-likelihood convergence:  TRUE
+full SL.glm_All
+full SL.rpart_All
+full SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Non-Negative log-likelihood convergence:  TRUE
+full SL.glm_All
+full SL.rpart_All
+full SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Non-Negative log-likelihood convergence:  TRUE
+full SL.glm_All
+full SL.rpart_All
+full SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Non-Negative log-likelihood convergence:  TRUE
+full SL.glm_All
+full SL.rpart_All
+full SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Non-Negative log-likelihood convergence:  TRUE
+full SL.glm_All
+full SL.rpart_All
+full SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Non-Negative log-likelihood convergence:  TRUE
+full SL.glm_All
+full SL.rpart_All
+full SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Non-Negative log-likelihood convergence:  TRUE
+full SL.glm_All
+full SL.rpart_All
+full SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Non-Negative log-likelihood convergence:  TRUE
+full SL.glm_All
+full SL.rpart_All
+full SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Number of covariates in All is: 25
+CV SL.glm_All
+CV SL.rpart_All
+CV SL.glmnet_All
+Non-Negative log-likelihood convergence:  TRUE
+full SL.glm_All
+full SL.rpart_All
+full SL.glmnet_All
+Loading required package: survSuperLearner
+
+Attaching package: ‘survSuperLearner’
+
+The following object is masked from ‘package:SuperLearner’:
+
+    All
+
+CV All, fold 1
+Number of covariates in All is: 26
+CV survSL.coxph, fold 1
+CV survSL.weibreg, fold 1
+CV survSL.rfsrc, fold 1
+CV All, fold 2
+Number of covariates in All is: 26
+CV survSL.coxph, fold 2
+CV survSL.weibreg, fold 2
+CV survSL.rfsrc, fold 2
+CV All, fold 3
+Number of covariates in All is: 26
+CV survSL.coxph, fold 3
+CV survSL.weibreg, fold 3
+CV survSL.rfsrc, fold 3
+CV All, fold 4
+Number of covariates in All is: 26
+CV survSL.coxph, fold 4
+CV survSL.weibreg, fold 4
+CV survSL.rfsrc, fold 4
+CV All, fold 5
+Number of covariates in All is: 26
+CV survSL.coxph, fold 5
+CV survSL.weibreg, fold 5
+CV survSL.rfsrc, fold 5
+CV All, fold 6
+Number of covariates in All is: 26
+CV survSL.coxph, fold 6
+CV survSL.weibreg, fold 6
+CV survSL.rfsrc, fold 6
+CV All, fold 7
+Number of covariates in All is: 26
+CV survSL.coxph, fold 7
+CV survSL.weibreg, fold 7
+CV survSL.rfsrc, fold 7
+CV All, fold 8
+Number of covariates in All is: 26
+CV survSL.coxph, fold 8
+CV survSL.weibreg, fold 8
+CV survSL.rfsrc, fold 8
+CV All, fold 9
+Number of covariates in All is: 26
+CV survSL.coxph, fold 9
+CV survSL.weibreg, fold 9
+CV survSL.rfsrc, fold 9
+CV All, fold 10
+Number of covariates in All is: 26
+CV survSL.coxph, fold 10
+CV survSL.weibreg, fold 10
+CV survSL.rfsrc, fold 10
+CV All, fold 1
+Number of covariates in All is: 26
+CV survSL.coxph, fold 1
+CV survSL.weibreg, fold 1
+CV survSL.rfsrc, fold 1
+CV All, fold 2
+Number of covariates in All is: 26
+CV survSL.coxph, fold 2
+CV survSL.weibreg, fold 2
+CV survSL.rfsrc, fold 2
+CV All, fold 3
+Number of covariates in All is: 26
+CV survSL.coxph, fold 3
+CV survSL.weibreg, fold 3
+CV survSL.rfsrc, fold 3
+CV All, fold 4
+Number of covariates in All is: 26
+CV survSL.coxph, fold 4
+CV survSL.weibreg, fold 4
+CV survSL.rfsrc, fold 4
+CV All, fold 5
+Number of covariates in All is: 26
+CV survSL.coxph, fold 5
+CV survSL.weibreg, fold 5
+CV survSL.rfsrc, fold 5
+CV All, fold 6
+Number of covariates in All is: 26
+CV survSL.coxph, fold 6
+CV survSL.weibreg, fold 6
+CV survSL.rfsrc, fold 6
+CV All, fold 7
+Number of covariates in All is: 26
+CV survSL.coxph, fold 7
+CV survSL.weibreg, fold 7
+CV survSL.rfsrc, fold 7
+CV All, fold 8
+Number of covariates in All is: 26
+CV survSL.coxph, fold 8
+CV survSL.weibreg, fold 8
+CV survSL.rfsrc, fold 8
+CV All, fold 9
+Number of covariates in All is: 26
+CV survSL.coxph, fold 9
+CV survSL.weibreg, fold 9
+CV survSL.rfsrc, fold 9
+CV All, fold 10
+Number of covariates in All is: 26
+CV survSL.coxph, fold 10
+CV survSL.weibreg, fold 10
+CV survSL.rfsrc, fold 10
+Performing iterative SuperLearner...
+Converged in 2 iterations.
+full survSL.coxph
+full survSL.weibreg
+full survSL.rfsrc
+full survSL.coxph
+full survSL.weibreg
+full survSL.rfsrc
+CV All, fold 1
+Number of covariates in All is: 26
+CV survSL.coxph, fold 1
+CV survSL.weibreg, fold 1
+CV survSL.rfsrc, fold 1
+CV All, fold 2
+Number of covariates in All is: 26
+CV survSL.coxph, fold 2
+CV survSL.weibreg, fold 2
+CV survSL.rfsrc, fold 2
+CV All, fold 3
+Number of covariates in All is: 26
+CV survSL.coxph, fold 3
+CV survSL.weibreg, fold 3
+CV survSL.rfsrc, fold 3
+CV All, fold 4
+Number of covariates in All is: 26
+CV survSL.coxph, fold 4
+CV survSL.weibreg, fold 4
+CV survSL.rfsrc, fold 4
+CV All, fold 5
+Number of covariates in All is: 26
+CV survSL.coxph, fold 5
+CV survSL.weibreg, fold 5
+CV survSL.rfsrc, fold 5
+CV All, fold 6
+Number of covariates in All is: 26
+CV survSL.coxph, fold 6
+CV survSL.weibreg, fold 6
+CV survSL.rfsrc, fold 6
+CV All, fold 7
+Number of covariates in All is: 26
+CV survSL.coxph, fold 7
+CV survSL.weibreg, fold 7
+CV survSL.rfsrc, fold 7
+CV All, fold 8
+Number of covariates in All is: 26
+CV survSL.coxph, fold 8
+CV survSL.weibreg, fold 8
+CV survSL.rfsrc, fold 8
+CV All, fold 9
+Number of covariates in All is: 26
+CV survSL.coxph, fold 9
+CV survSL.weibreg, fold 9
+CV survSL.rfsrc, fold 9
+CV All, fold 10
+Number of covariates in All is: 26
+CV survSL.coxph, fold 10
+CV survSL.weibreg, fold 10
+CV survSL.rfsrc, fold 10
+CV All, fold 1
+Number of covariates in All is: 26
+CV survSL.coxph, fold 1
+CV survSL.weibreg, fold 1
+CV survSL.rfsrc, fold 1
+CV All, fold 2
+Number of covariates in All is: 26
+CV survSL.coxph, fold 2
+CV survSL.weibreg, fold 2
+CV survSL.rfsrc, fold 2
+CV All, fold 3
+Number of covariates in All is: 26
+CV survSL.coxph, fold 3
+CV survSL.weibreg, fold 3
+CV survSL.rfsrc, fold 3
+CV All, fold 4
+Number of covariates in All is: 26
+CV survSL.coxph, fold 4
+CV survSL.weibreg, fold 4
+CV survSL.rfsrc, fold 4
+CV All, fold 5
+Number of covariates in All is: 26
+CV survSL.coxph, fold 5
+CV survSL.weibreg, fold 5
+CV survSL.rfsrc, fold 5
+CV All, fold 6
+Number of covariates in All is: 26
+CV survSL.coxph, fold 6
+CV survSL.weibreg, fold 6
+CV survSL.rfsrc, fold 6
+CV All, fold 7
+Number of covariates in All is: 26
+CV survSL.coxph, fold 7
+CV survSL.weibreg, fold 7
+CV survSL.rfsrc, fold 7
+CV All, fold 8
+Number of covariates in All is: 26
+CV survSL.coxph, fold 8
+CV survSL.weibreg, fold 8
+CV survSL.rfsrc, fold 8
+CV All, fold 9
+Number of covariates in All is: 26
+CV survSL.coxph, fold 9
+CV survSL.weibreg, fold 9
+CV survSL.rfsrc, fold 9
+CV All, fold 10
+Number of covariates in All is: 26
+CV survSL.coxph, fold 10
+CV survSL.weibreg, fold 10
+CV survSL.rfsrc, fold 10
+Performing iterative SuperLearner...
+Converged in 2 iterations.
+full survSL.coxph
+full survSL.weibreg
+full survSL.rfsrc
+full survSL.coxph
+full survSL.weibreg
+full survSL.rfsrc
+CV All, fold 1
+Number of covariates in All is: 26
+CV survSL.coxph, fold 1
+CV survSL.weibreg, fold 1
+CV survSL.rfsrc, fold 1
+CV All, fold 2
+Number of covariates in All is: 26
+CV survSL.coxph, fold 2
+CV survSL.weibreg, fold 2
+CV survSL.rfsrc, fold 2
+CV All, fold 3
+Number of covariates in All is: 26
+CV survSL.coxph, fold 3
+CV survSL.weibreg, fold 3
+CV survSL.rfsrc, fold 3
+CV All, fold 4
+Number of covariates in All is: 26
+CV survSL.coxph, fold 4
+CV survSL.weibreg, fold 4
+CV survSL.rfsrc, fold 4
+CV All, fold 5
+Number of covariates in All is: 26
+CV survSL.coxph, fold 5
+CV survSL.weibreg, fold 5
+CV survSL.rfsrc, fold 5
+CV All, fold 6
+Number of covariates in All is: 26
+CV survSL.coxph, fold 6
+CV survSL.weibreg, fold 6
+CV survSL.rfsrc, fold 6
+CV All, fold 7
+Number of covariates in All is: 26
+CV survSL.coxph, fold 7
+CV survSL.weibreg, fold 7
+CV survSL.rfsrc, fold 7
+CV All, fold 8
+Number of covariates in All is: 26
+CV survSL.coxph, fold 8
+CV survSL.weibreg, fold 8
+CV survSL.rfsrc, fold 8
+CV All, fold 9
+Number of covariates in All is: 26
+CV survSL.coxph, fold 9
+CV survSL.weibreg, fold 9
+CV survSL.rfsrc, fold 9
+CV All, fold 10
+Number of covariates in All is: 26
+CV survSL.coxph, fold 10
+CV survSL.weibreg, fold 10
+CV survSL.rfsrc, fold 10
+CV All, fold 1
+Number of covariates in All is: 26
+CV survSL.coxph, fold 1
+CV survSL.weibreg, fold 1
+CV survSL.rfsrc, fold 1
+CV All, fold 2
+Number of covariates in All is: 26
+CV survSL.coxph, fold 2
+CV survSL.weibreg, fold 2
+CV survSL.rfsrc, fold 2
+CV All, fold 3
+Number of covariates in All is: 26
+CV survSL.coxph, fold 3
+CV survSL.weibreg, fold 3
+CV survSL.rfsrc, fold 3
+CV All, fold 4
+Number of covariates in All is: 26
+CV survSL.coxph, fold 4
+CV survSL.weibreg, fold 4
+CV survSL.rfsrc, fold 4
+CV All, fold 5
+Number of covariates in All is: 26
+CV survSL.coxph, fold 5
+CV survSL.weibreg, fold 5
+CV survSL.rfsrc, fold 5
+CV All, fold 6
+Number of covariates in All is: 26
+CV survSL.coxph, fold 6
+CV survSL.weibreg, fold 6
+CV survSL.rfsrc, fold 6
+CV All, fold 7
+Number of covariates in All is: 26
+CV survSL.coxph, fold 7
+CV survSL.weibreg, fold 7
+CV survSL.rfsrc, fold 7
+CV All, fold 8
+Number of covariates in All is: 26
+CV survSL.coxph, fold 8
+CV survSL.weibreg, fold 8
+CV survSL.rfsrc, fold 8
+CV All, fold 9
+Number of covariates in All is: 26
+CV survSL.coxph, fold 9
+CV survSL.weibreg, fold 9
+CV survSL.rfsrc, fold 9
+CV All, fold 10
+Number of covariates in All is: 26
+CV survSL.coxph, fold 10
+CV survSL.weibreg, fold 10
+CV survSL.rfsrc, fold 10
+Performing iterative SuperLearner...
+Converged in 2 iterations.
+full survSL.coxph
+full survSL.weibreg
+full survSL.rfsrc
+full survSL.coxph
+full survSL.weibreg
+full survSL.rfsrc
+CV All, fold 1
+Number of covariates in All is: 26
+CV survSL.coxph, fold 1
+CV survSL.weibreg, fold 1
+CV survSL.rfsrc, fold 1
+CV All, fold 2
+Number of covariates in All is: 26
+CV survSL.coxph, fold 2
+CV survSL.weibreg, fold 2
+CV survSL.rfsrc, fold 2
+CV All, fold 3
+Number of covariates in All is: 26
+CV survSL.coxph, fold 3
+CV survSL.weibreg, fold 3
+CV survSL.rfsrc, fold 3
+CV All, fold 4
+Number of covariates in All is: 26
+CV survSL.coxph, fold 4
+CV survSL.weibreg, fold 4
+CV survSL.rfsrc, fold 4
+CV All, fold 5
+Number of covariates in All is: 26
+CV survSL.coxph, fold 5
+CV survSL.weibreg, fold 5
+CV survSL.rfsrc, fold 5
+CV All, fold 6
+Number of covariates in All is: 26
+CV survSL.coxph, fold 6
+CV survSL.weibreg, fold 6
+CV survSL.rfsrc, fold 6
+CV All, fold 7
+Number of covariates in All is: 26
+CV survSL.coxph, fold 7
+CV survSL.weibreg, fold 7
+CV survSL.rfsrc, fold 7
+CV All, fold 8
+Number of covariates in All is: 26
+CV survSL.coxph, fold 8
+CV survSL.weibreg, fold 8
+CV survSL.rfsrc, fold 8
+CV All, fold 9
+Number of covariates in All is: 26
+CV survSL.coxph, fold 9
+CV survSL.weibreg, fold 9
+CV survSL.rfsrc, fold 9
+CV All, fold 10
+Number of covariates in All is: 26
+CV survSL.coxph, fold 10
+CV survSL.weibreg, fold 10
+CV survSL.rfsrc, fold 10
+CV All, fold 1
+Number of covariates in All is: 26
+CV survSL.coxph, fold 1
+CV survSL.weibreg, fold 1
+CV survSL.rfsrc, fold 1
+CV All, fold 2
+Number of covariates in All is: 26
+CV survSL.coxph, fold 2
+CV survSL.weibreg, fold 2
+CV survSL.rfsrc, fold 2
+CV All, fold 3
+Number of covariates in All is: 26
+CV survSL.coxph, fold 3
+CV survSL.weibreg, fold 3
+CV survSL.rfsrc, fold 3
+CV All, fold 4
+Number of covariates in All is: 26
+CV survSL.coxph, fold 4
+CV survSL.weibreg, fold 4
+CV survSL.rfsrc, fold 4
+CV All, fold 5
+Number of covariates in All is: 26
+CV survSL.coxph, fold 5
+CV survSL.weibreg, fold 5
+CV survSL.rfsrc, fold 5
+CV All, fold 6
+Number of covariates in All is: 26
+CV survSL.coxph, fold 6
+CV survSL.weibreg, fold 6
+CV survSL.rfsrc, fold 6
+CV All, fold 7
+Number of covariates in All is: 26
+CV survSL.coxph, fold 7
+CV survSL.weibreg, fold 7
+CV survSL.rfsrc, fold 7
+CV All, fold 8
+Number of covariates in All is: 26
+CV survSL.coxph, fold 8
+CV survSL.weibreg, fold 8
+CV survSL.rfsrc, fold 8
+CV All, fold 9
+Number of covariates in All is: 26
+CV survSL.coxph, fold 9
+CV survSL.weibreg, fold 9
+CV survSL.rfsrc, fold 9
+CV All, fold 10
+Number of covariates in All is: 26
+CV survSL.coxph, fold 10
+CV survSL.weibreg, fold 10
+CV survSL.rfsrc, fold 10
+Performing iterative SuperLearner...
+Converged in 2 iterations.
+full survSL.coxph
+full survSL.weibreg
+full survSL.rfsrc
+full survSL.coxph
+full survSL.weibreg
+full survSL.rfsrc
+CV All, fold 1
+Number of covariates in All is: 26
+CV survSL.coxph, fold 1
+CV survSL.weibreg, fold 1
+CV survSL.rfsrc, fold 1
+CV All, fold 2
+Number of covariates in All is: 26
+CV survSL.coxph, fold 2
+CV survSL.weibreg, fold 2
+CV survSL.rfsrc, fold 2
+CV All, fold 3
+Number of covariates in All is: 26
+CV survSL.coxph, fold 3
+CV survSL.weibreg, fold 3
+CV survSL.rfsrc, fold 3
+CV All, fold 4
+Number of covariates in All is: 26
+CV survSL.coxph, fold 4
+CV survSL.weibreg, fold 4
+CV survSL.rfsrc, fold 4
+CV All, fold 5
+Number of covariates in All is: 26
+CV survSL.coxph, fold 5
+CV survSL.weibreg, fold 5
+CV survSL.rfsrc, fold 5
+CV All, fold 6
+Number of covariates in All is: 26
+CV survSL.coxph, fold 6
+CV survSL.weibreg, fold 6
+CV survSL.rfsrc, fold 6
+CV All, fold 7
+Number of covariates in All is: 26
+CV survSL.coxph, fold 7
+CV survSL.weibreg, fold 7
+CV survSL.rfsrc, fold 7
+CV All, fold 8
+Number of covariates in All is: 26
+CV survSL.coxph, fold 8
+CV survSL.weibreg, fold 8
+CV survSL.rfsrc, fold 8
+CV All, fold 9
+Number of covariates in All is: 26
+CV survSL.coxph, fold 9
+CV survSL.weibreg, fold 9
+CV survSL.rfsrc, fold 9
+CV All, fold 10
+Number of covariates in All is: 26
+CV survSL.coxph, fold 10
+CV survSL.weibreg, fold 10
+CV survSL.rfsrc, fold 10
+CV All, fold 1
+Number of covariates in All is: 26
+CV survSL.coxph, fold 1
+CV survSL.weibreg, fold 1
+CV survSL.rfsrc, fold 1
+CV All, fold 2
+Number of covariates in All is: 26
+CV survSL.coxph, fold 2
+CV survSL.weibreg, fold 2
+CV survSL.rfsrc, fold 2
+CV All, fold 3
+Number of covariates in All is: 26
+CV survSL.coxph, fold 3
+CV survSL.weibreg, fold 3
+CV survSL.rfsrc, fold 3
+CV All, fold 4
+Number of covariates in All is: 26
+CV survSL.coxph, fold 4
+CV survSL.weibreg, fold 4
+CV survSL.rfsrc, fold 4
+CV All, fold 5
+Number of covariates in All is: 26
+CV survSL.coxph, fold 5
+CV survSL.weibreg, fold 5
+CV survSL.rfsrc, fold 5
+CV All, fold 6
+Number of covariates in All is: 26
+CV survSL.coxph, fold 6
+CV survSL.weibreg, fold 6
+CV survSL.rfsrc, fold 6
+CV All, fold 7
+Number of covariates in All is: 26
+CV survSL.coxph, fold 7
+CV survSL.weibreg, fold 7
+CV survSL.rfsrc, fold 7
+CV All, fold 8
+Number of covariates in All is: 26
+CV survSL.coxph, fold 8
+CV survSL.weibreg, fold 8
+CV survSL.rfsrc, fold 8
+CV All, fold 9
+Number of covariates in All is: 26
+CV survSL.coxph, fold 9
+CV survSL.weibreg, fold 9
+CV survSL.rfsrc, fold 9
+CV All, fold 10
+Number of covariates in All is: 26
+CV survSL.coxph, fold 10
+CV survSL.weibreg, fold 10
+CV survSL.rfsrc, fold 10
+Performing iterative SuperLearner...
+Converged in 2 iterations.
+full survSL.coxph
+full survSL.weibreg
+full survSL.rfsrc
+full survSL.coxph
+full survSL.weibreg
+full survSL.rfsrc
+CV All, fold 1
+Number of covariates in All is: 26
+CV survSL.coxph, fold 1
+CV survSL.weibreg, fold 1
+CV survSL.rfsrc, fold 1
+CV All, fold 2
+Number of covariates in All is: 26
+CV survSL.coxph, fold 2
+CV survSL.weibreg, fold 2
+CV survSL.rfsrc, fold 2
+CV All, fold 3
+Number of covariates in All is: 26
+CV survSL.coxph, fold 3
+CV survSL.weibreg, fold 3
+CV survSL.rfsrc, fold 3
+CV All, fold 4
+Number of covariates in All is: 26
+CV survSL.coxph, fold 4
+CV survSL.weibreg, fold 4
+CV survSL.rfsrc, fold 4
+CV All, fold 5
+Number of covariates in All is: 26
+CV survSL.coxph, fold 5
+CV survSL.weibreg, fold 5
+CV survSL.rfsrc, fold 5
+CV All, fold 6
+Number of covariates in All is: 26
+CV survSL.coxph, fold 6
+CV survSL.weibreg, fold 6
+CV survSL.rfsrc, fold 6
+CV All, fold 7
+Number of covariates in All is: 26
+CV survSL.coxph, fold 7
+CV survSL.weibreg, fold 7
+CV survSL.rfsrc, fold 7
+CV All, fold 8
+Number of covariates in All is: 26
+CV survSL.coxph, fold 8
+CV survSL.weibreg, fold 8
+CV survSL.rfsrc, fold 8
+CV All, fold 9
+Number of covariates in All is: 26
+CV survSL.coxph, fold 9
+CV survSL.weibreg, fold 9
+CV survSL.rfsrc, fold 9
+CV All, fold 10
+Number of covariates in All is: 26
+CV survSL.coxph, fold 10
+CV survSL.weibreg, fold 10
+CV survSL.rfsrc, fold 10
+CV All, fold 1
+Number of covariates in All is: 26
+CV survSL.coxph, fold 1
+CV survSL.weibreg, fold 1
+CV survSL.rfsrc, fold 1
+CV All, fold 2
+Number of covariates in All is: 26
+CV survSL.coxph, fold 2
+CV survSL.weibreg, fold 2
+CV survSL.rfsrc, fold 2
+CV All, fold 3
+Number of covariates in All is: 26
+CV survSL.coxph, fold 3
+CV survSL.weibreg, fold 3
+CV survSL.rfsrc, fold 3
+CV All, fold 4
+Number of covariates in All is: 26
+CV survSL.coxph, fold 4
+CV survSL.weibreg, fold 4
+CV survSL.rfsrc, fold 4
+CV All, fold 5
+Number of covariates in All is: 26
+CV survSL.coxph, fold 5
+CV survSL.weibreg, fold 5
+CV survSL.rfsrc, fold 5
+CV All, fold 6
+Number of covariates in All is: 26
+CV survSL.coxph, fold 6
+CV survSL.weibreg, fold 6
+CV survSL.rfsrc, fold 6
+CV All, fold 7
+Number of covariates in All is: 26
+CV survSL.coxph, fold 7
+CV survSL.weibreg, fold 7
+CV survSL.rfsrc, fold 7
+CV All, fold 8
+Number of covariates in All is: 26
+CV survSL.coxph, fold 8
+CV survSL.weibreg, fold 8
+CV survSL.rfsrc, fold 8
+CV All, fold 9
+Number of covariates in All is: 26
+CV survSL.coxph, fold 9
+CV survSL.weibreg, fold 9
+CV survSL.rfsrc, fold 9
+CV All, fold 10
+Number of covariates in All is: 26
+CV survSL.coxph, fold 10
+CV survSL.weibreg, fold 10
+CV survSL.rfsrc, fold 10
+Performing iterative SuperLearner...
+Converged in 2 iterations.
+full survSL.coxph
+full survSL.weibreg
+full survSL.rfsrc
+full survSL.coxph
+full survSL.weibreg
+full survSL.rfsrc
+CV All, fold 1
+Number of covariates in All is: 26
+CV survSL.coxph, fold 1
+CV survSL.weibreg, fold 1
+CV survSL.rfsrc, fold 1
+CV All, fold 2
+Number of covariates in All is: 26
+CV survSL.coxph, fold 2
+CV survSL.weibreg, fold 2
+CV survSL.rfsrc, fold 2
+CV All, fold 3
+Number of covariates in All is: 26
+CV survSL.coxph, fold 3
+CV survSL.weibreg, fold 3
+CV survSL.rfsrc, fold 3
+CV All, fold 4
+Number of covariates in All is: 26
+CV survSL.coxph, fold 4
+CV survSL.weibreg, fold 4
+CV survSL.rfsrc, fold 4
+CV All, fold 5
+Number of covariates in All is: 26
+CV survSL.coxph, fold 5
+CV survSL.weibreg, fold 5
+CV survSL.rfsrc, fold 5
+CV All, fold 6
+Number of covariates in All is: 26
+CV survSL.coxph, fold 6
+CV survSL.weibreg, fold 6
+CV survSL.rfsrc, fold 6
+CV All, fold 7
+Number of covariates in All is: 26
+CV survSL.coxph, fold 7
+CV survSL.weibreg, fold 7
+CV survSL.rfsrc, fold 7
+CV All, fold 8
+Number of covariates in All is: 26
+CV survSL.coxph, fold 8
+CV survSL.weibreg, fold 8
+CV survSL.rfsrc, fold 8
+CV All, fold 9
+Number of covariates in All is: 26
+CV survSL.coxph, fold 9
+CV survSL.weibreg, fold 9
+CV survSL.rfsrc, fold 9
+CV All, fold 10
+Number of covariates in All is: 26
+CV survSL.coxph, fold 10
+CV survSL.weibreg, fold 10
+CV survSL.rfsrc, fold 10
+CV All, fold 1
+Number of covariates in All is: 26
+CV survSL.coxph, fold 1
+CV survSL.weibreg, fold 1
+CV survSL.rfsrc, fold 1
+CV All, fold 2
+Number of covariates in All is: 26
+CV survSL.coxph, fold 2
+CV survSL.weibreg, fold 2
+CV survSL.rfsrc, fold 2
+CV All, fold 3
+Number of covariates in All is: 26
+CV survSL.coxph, fold 3
+CV survSL.weibreg, fold 3
+CV survSL.rfsrc, fold 3
+CV All, fold 4
+Number of covariates in All is: 26
+CV survSL.coxph, fold 4
+CV survSL.weibreg, fold 4
+CV survSL.rfsrc, fold 4
+CV All, fold 5
+Number of covariates in All is: 26
+CV survSL.coxph, fold 5
+CV survSL.weibreg, fold 5
+CV survSL.rfsrc, fold 5
+CV All, fold 6
+Number of covariates in All is: 26
+CV survSL.coxph, fold 6
+CV survSL.weibreg, fold 6
+CV survSL.rfsrc, fold 6
+CV All, fold 7
+Number of covariates in All is: 26
+CV survSL.coxph, fold 7
+CV survSL.weibreg, fold 7
+CV survSL.rfsrc, fold 7
+CV All, fold 8
+Number of covariates in All is: 26
+CV survSL.coxph, fold 8
+CV survSL.weibreg, fold 8
+CV survSL.rfsrc, fold 8
+CV All, fold 9
+Number of covariates in All is: 26
+CV survSL.coxph, fold 9
+CV survSL.weibreg, fold 9
+CV survSL.rfsrc, fold 9
+CV All, fold 10
+Number of covariates in All is: 26
+CV survSL.coxph, fold 10
+CV survSL.weibreg, fold 10
+CV survSL.rfsrc, fold 10
+Performing iterative SuperLearner...
+Converged in 2 iterations.
+full survSL.coxph
+full survSL.weibreg
+full survSL.rfsrc
+full survSL.coxph
+full survSL.weibreg
+full survSL.rfsrc
+CV All, fold 1
+Number of covariates in All is: 26
+CV survSL.coxph, fold 1
+CV survSL.weibreg, fold 1
+CV survSL.rfsrc, fold 1
+CV All, fold 2
+Number of covariates in All is: 26
+CV survSL.coxph, fold 2
+CV survSL.weibreg, fold 2
+CV survSL.rfsrc, fold 2
+CV All, fold 3
+Number of covariates in All is: 26
+CV survSL.coxph, fold 3
+CV survSL.weibreg, fold 3
+CV survSL.rfsrc, fold 3
+CV All, fold 4
+Number of covariates in All is: 26
+CV survSL.coxph, fold 4
+CV survSL.weibreg, fold 4
+CV survSL.rfsrc, fold 4
+CV All, fold 5
+Number of covariates in All is: 26
+CV survSL.coxph, fold 5
+CV survSL.weibreg, fold 5
+CV survSL.rfsrc, fold 5
+CV All, fold 6
+Number of covariates in All is: 26
+CV survSL.coxph, fold 6
+CV survSL.weibreg, fold 6
+CV survSL.rfsrc, fold 6
+CV All, fold 7
+Number of covariates in All is: 26
+CV survSL.coxph, fold 7
+CV survSL.weibreg, fold 7
+CV survSL.rfsrc, fold 7
+CV All, fold 8
+Number of covariates in All is: 26
+CV survSL.coxph, fold 8
+CV survSL.weibreg, fold 8
+CV survSL.rfsrc, fold 8
+CV All, fold 9
+Number of covariates in All is: 26
+CV survSL.coxph, fold 9
+CV survSL.weibreg, fold 9
+CV survSL.rfsrc, fold 9
+CV All, fold 10
+Number of covariates in All is: 26
+CV survSL.coxph, fold 10
+CV survSL.weibreg, fold 10
+CV survSL.rfsrc, fold 10
+CV All, fold 1
+Number of covariates in All is: 26
+CV survSL.coxph, fold 1
+CV survSL.weibreg, fold 1
+CV survSL.rfsrc, fold 1
+CV All, fold 2
+Number of covariates in All is: 26
+CV survSL.coxph, fold 2
+CV survSL.weibreg, fold 2
+CV survSL.rfsrc, fold 2
+CV All, fold 3
+Number of covariates in All is: 26
+CV survSL.coxph, fold 3
+CV survSL.weibreg, fold 3
+CV survSL.rfsrc, fold 3
+CV All, fold 4
+Number of covariates in All is: 26
+CV survSL.coxph, fold 4
+CV survSL.weibreg, fold 4
+CV survSL.rfsrc, fold 4
+CV All, fold 5
+Number of covariates in All is: 26
+CV survSL.coxph, fold 5
+CV survSL.weibreg, fold 5
+CV survSL.rfsrc, fold 5
+CV All, fold 6
+Number of covariates in All is: 26
+CV survSL.coxph, fold 6
+CV survSL.weibreg, fold 6
+CV survSL.rfsrc, fold 6
+CV All, fold 7
+Number of covariates in All is: 26
+CV survSL.coxph, fold 7
+CV survSL.weibreg, fold 7
+CV survSL.rfsrc, fold 7
+CV All, fold 8
+Number of covariates in All is: 26
+CV survSL.coxph, fold 8
+CV survSL.weibreg, fold 8
+CV survSL.rfsrc, fold 8
+CV All, fold 9
+Number of covariates in All is: 26
+CV survSL.coxph, fold 9
+CV survSL.weibreg, fold 9
+CV survSL.rfsrc, fold 9
+CV All, fold 10
+Number of covariates in All is: 26
+CV survSL.coxph, fold 10
+CV survSL.weibreg, fold 10
+CV survSL.rfsrc, fold 10
+Performing iterative SuperLearner...
+Converged in 2 iterations.
+full survSL.coxph
+full survSL.weibreg
+full survSL.rfsrc
+full survSL.coxph
+full survSL.weibreg
+full survSL.rfsrc
+CV All, fold 1
+Number of covariates in All is: 26
+CV survSL.coxph, fold 1
+CV survSL.weibreg, fold 1
+CV survSL.rfsrc, fold 1
+CV All, fold 2
+Number of covariates in All is: 26
+CV survSL.coxph, fold 2
+CV survSL.weibreg, fold 2
+CV survSL.rfsrc, fold 2
+CV All, fold 3
+Number of covariates in All is: 26
+CV survSL.coxph, fold 3
+CV survSL.weibreg, fold 3
+CV survSL.rfsrc, fold 3
+CV All, fold 4
+Number of covariates in All is: 26
+CV survSL.coxph, fold 4
+CV survSL.weibreg, fold 4
+CV survSL.rfsrc, fold 4
+CV All, fold 5
+Number of covariates in All is: 26
+CV survSL.coxph, fold 5
+CV survSL.weibreg, fold 5
+CV survSL.rfsrc, fold 5
+CV All, fold 6
+Number of covariates in All is: 26
+CV survSL.coxph, fold 6
+CV survSL.weibreg, fold 6
+CV survSL.rfsrc, fold 6
+CV All, fold 7
+Number of covariates in All is: 26
+CV survSL.coxph, fold 7
+CV survSL.weibreg, fold 7
+CV survSL.rfsrc, fold 7
+CV All, fold 8
+Number of covariates in All is: 26
+CV survSL.coxph, fold 8
+CV survSL.weibreg, fold 8
+CV survSL.rfsrc, fold 8
+CV All, fold 9
+Number of covariates in All is: 26
+CV survSL.coxph, fold 9
+CV survSL.weibreg, fold 9
+CV survSL.rfsrc, fold 9
+CV All, fold 10
+Number of covariates in All is: 26
+CV survSL.coxph, fold 10
+CV survSL.weibreg, fold 10
+CV survSL.rfsrc, fold 10
+CV All, fold 1
+Number of covariates in All is: 26
+CV survSL.coxph, fold 1
+CV survSL.weibreg, fold 1
+CV survSL.rfsrc, fold 1
+CV All, fold 2
+Number of covariates in All is: 26
+CV survSL.coxph, fold 2
+CV survSL.weibreg, fold 2
+CV survSL.rfsrc, fold 2
+CV All, fold 3
+Number of covariates in All is: 26
+CV survSL.coxph, fold 3
+CV survSL.weibreg, fold 3
+CV survSL.rfsrc, fold 3
+CV All, fold 4
+Number of covariates in All is: 26
+CV survSL.coxph, fold 4
+CV survSL.weibreg, fold 4
+CV survSL.rfsrc, fold 4
+CV All, fold 5
+Number of covariates in All is: 26
+CV survSL.coxph, fold 5
+CV survSL.weibreg, fold 5
+CV survSL.rfsrc, fold 5
+CV All, fold 6
+Number of covariates in All is: 26
+CV survSL.coxph, fold 6
+CV survSL.weibreg, fold 6
+CV survSL.rfsrc, fold 6
+CV All, fold 7
+Number of covariates in All is: 26
+CV survSL.coxph, fold 7
+CV survSL.weibreg, fold 7
+CV survSL.rfsrc, fold 7
+CV All, fold 8
+Number of covariates in All is: 26
+CV survSL.coxph, fold 8
+CV survSL.weibreg, fold 8
+CV survSL.rfsrc, fold 8
+CV All, fold 9
+Number of covariates in All is: 26
+CV survSL.coxph, fold 9
+CV survSL.weibreg, fold 9
+CV survSL.rfsrc, fold 9
+CV All, fold 10
+Number of covariates in All is: 26
+CV survSL.coxph, fold 10
+CV survSL.weibreg, fold 10
+CV survSL.rfsrc, fold 10
+Performing iterative SuperLearner...
+Converged in 2 iterations.
+full survSL.coxph
+full survSL.weibreg
+full survSL.rfsrc
+full survSL.coxph
+full survSL.weibreg
+full survSL.rfsrc
+CV All, fold 1
+Number of covariates in All is: 26
+CV survSL.coxph, fold 1
+CV survSL.weibreg, fold 1
+CV survSL.rfsrc, fold 1
+CV All, fold 2
+Number of covariates in All is: 26
+CV survSL.coxph, fold 2
+CV survSL.weibreg, fold 2
+CV survSL.rfsrc, fold 2
+CV All, fold 3
+Number of covariates in All is: 26
+CV survSL.coxph, fold 3
+CV survSL.weibreg, fold 3
+CV survSL.rfsrc, fold 3
+CV All, fold 4
+Number of covariates in All is: 26
+CV survSL.coxph, fold 4
+CV survSL.weibreg, fold 4
+CV survSL.rfsrc, fold 4
+CV All, fold 5
+Number of covariates in All is: 26
+CV survSL.coxph, fold 5
+CV survSL.weibreg, fold 5
+CV survSL.rfsrc, fold 5
+CV All, fold 6
+Number of covariates in All is: 26
+CV survSL.coxph, fold 6
+CV survSL.weibreg, fold 6
+CV survSL.rfsrc, fold 6
+CV All, fold 7
+Number of covariates in All is: 26
+CV survSL.coxph, fold 7
+CV survSL.weibreg, fold 7
+CV survSL.rfsrc, fold 7
+CV All, fold 8
+Number of covariates in All is: 26
+CV survSL.coxph, fold 8
+CV survSL.weibreg, fold 8
+CV survSL.rfsrc, fold 8
+CV All, fold 9
+Number of covariates in All is: 26
+CV survSL.coxph, fold 9
+CV survSL.weibreg, fold 9
+CV survSL.rfsrc, fold 9
+CV All, fold 10
+Number of covariates in All is: 26
+CV survSL.coxph, fold 10
+CV survSL.weibreg, fold 10
+CV survSL.rfsrc, fold 10
+CV All, fold 1
+Number of covariates in All is: 26
+CV survSL.coxph, fold 1
+CV survSL.weibreg, fold 1
+CV survSL.rfsrc, fold 1
+CV All, fold 2
+Number of covariates in All is: 26
+CV survSL.coxph, fold 2
+CV survSL.weibreg, fold 2
+CV survSL.rfsrc, fold 2
+CV All, fold 3
+Number of covariates in All is: 26
+CV survSL.coxph, fold 3
+CV survSL.weibreg, fold 3
+CV survSL.rfsrc, fold 3
+CV All, fold 4
+Number of covariates in All is: 26
+CV survSL.coxph, fold 4
+CV survSL.weibreg, fold 4
+CV survSL.rfsrc, fold 4
+CV All, fold 5
+Number of covariates in All is: 26
+CV survSL.coxph, fold 5
+CV survSL.weibreg, fold 5
+CV survSL.rfsrc, fold 5
+CV All, fold 6
+Number of covariates in All is: 26
+CV survSL.coxph, fold 6
+CV survSL.weibreg, fold 6
+CV survSL.rfsrc, fold 6
+CV All, fold 7
+Number of covariates in All is: 26
+CV survSL.coxph, fold 7
+CV survSL.weibreg, fold 7
+CV survSL.rfsrc, fold 7
+CV All, fold 8
+Number of covariates in All is: 26
+CV survSL.coxph, fold 8
+CV survSL.weibreg, fold 8
+CV survSL.rfsrc, fold 8
+CV All, fold 9
+Number of covariates in All is: 26
+CV survSL.coxph, fold 9
+CV survSL.weibreg, fold 9
+CV survSL.rfsrc, fold 9
+CV All, fold 10
+Number of covariates in All is: 26
+CV survSL.coxph, fold 10
+CV survSL.weibreg, fold 10
+CV survSL.rfsrc, fold 10
+Performing iterative SuperLearner...
+Converged in 2 iterations.
+full survSL.coxph
+full survSL.weibreg
+full survSL.rfsrc
+full survSL.coxph
+full survSL.weibreg
+full survSL.rfsrc
+CV All, fold 1
+Number of covariates in All is: 26
+CV survSL.coxph, fold 1
+CV survSL.weibreg, fold 1
+CV survSL.rfsrc, fold 1
+CV All, fold 2
+Number of covariates in All is: 26
+CV survSL.coxph, fold 2
+CV survSL.weibreg, fold 2
+CV survSL.rfsrc, fold 2
+CV All, fold 3
+Number of covariates in All is: 26
+CV survSL.coxph, fold 3
+CV survSL.weibreg, fold 3
+CV survSL.rfsrc, fold 3
+CV All, fold 4
+Number of covariates in All is: 26
+CV survSL.coxph, fold 4
+CV survSL.weibreg, fold 4
+CV survSL.rfsrc, fold 4
+CV All, fold 5
+Number of covariates in All is: 26
+CV survSL.coxph, fold 5
+CV survSL.weibreg, fold 5
+CV survSL.rfsrc, fold 5
+CV All, fold 6
+Number of covariates in All is: 26
+CV survSL.coxph, fold 6
+CV survSL.weibreg, fold 6
+CV survSL.rfsrc, fold 6
+CV All, fold 7
+Number of covariates in All is: 26
+CV survSL.coxph, fold 7
+CV survSL.weibreg, fold 7
+CV survSL.rfsrc, fold 7
+CV All, fold 8
+Number of covariates in All is: 26
+CV survSL.coxph, fold 8
+CV survSL.weibreg, fold 8
+CV survSL.rfsrc, fold 8
+CV All, fold 9
+Number of covariates in All is: 26
+CV survSL.coxph, fold 9
+CV survSL.weibreg, fold 9
+CV survSL.rfsrc, fold 9
+CV All, fold 10
+Number of covariates in All is: 26
+CV survSL.coxph, fold 10
+CV survSL.weibreg, fold 10
+CV survSL.rfsrc, fold 10
+CV All, fold 1
+Number of covariates in All is: 26
+CV survSL.coxph, fold 1
+CV survSL.weibreg, fold 1
+CV survSL.rfsrc, fold 1
+CV All, fold 2
+Number of covariates in All is: 26
+CV survSL.coxph, fold 2
+CV survSL.weibreg, fold 2
+CV survSL.rfsrc, fold 2
+CV All, fold 3
+Number of covariates in All is: 26
+CV survSL.coxph, fold 3
+CV survSL.weibreg, fold 3
+CV survSL.rfsrc, fold 3
+CV All, fold 4
+Number of covariates in All is: 26
+CV survSL.coxph, fold 4
+CV survSL.weibreg, fold 4
+CV survSL.rfsrc, fold 4
+CV All, fold 5
+Number of covariates in All is: 26
+CV survSL.coxph, fold 5
+CV survSL.weibreg, fold 5
+CV survSL.rfsrc, fold 5
+CV All, fold 6
+Number of covariates in All is: 26
+CV survSL.coxph, fold 6
+CV survSL.weibreg, fold 6
+CV survSL.rfsrc, fold 6
+CV All, fold 7
+Number of covariates in All is: 26
+CV survSL.coxph, fold 7
+CV survSL.weibreg, fold 7
+CV survSL.rfsrc, fold 7
+CV All, fold 8
+Number of covariates in All is: 26
+CV survSL.coxph, fold 8
+CV survSL.weibreg, fold 8
+CV survSL.rfsrc, fold 8
+CV All, fold 9
+Number of covariates in All is: 26
+CV survSL.coxph, fold 9
+CV survSL.weibreg, fold 9
+CV survSL.rfsrc, fold 9
+CV All, fold 10
+Number of covariates in All is: 26
+CV survSL.coxph, fold 10
+CV survSL.weibreg, fold 10
+CV survSL.rfsrc, fold 10
+Performing iterative SuperLearner...
+Converged in 2 iterations.
+full survSL.coxph
+full survSL.weibreg
+full survSL.rfsrc
+full survSL.coxph
+full survSL.weibreg
+full survSL.rfsrc
+CV All, fold 1
+Number of covariates in All is: 26
+CV survSL.coxph, fold 1
+CV survSL.weibreg, fold 1
+CV survSL.rfsrc, fold 1
+CV All, fold 2
+Number of covariates in All is: 26
+CV survSL.coxph, fold 2
+CV survSL.weibreg, fold 2
+CV survSL.rfsrc, fold 2
+CV All, fold 3
+Number of covariates in All is: 26
+CV survSL.coxph, fold 3
+CV survSL.weibreg, fold 3
+CV survSL.rfsrc, fold 3
+CV All, fold 4
+Number of covariates in All is: 26
+CV survSL.coxph, fold 4
+CV survSL.weibreg, fold 4
+CV survSL.rfsrc, fold 4
+CV All, fold 5
+Number of covariates in All is: 26
+CV survSL.coxph, fold 5
+CV survSL.weibreg, fold 5
+CV survSL.rfsrc, fold 5
+CV All, fold 6
+Number of covariates in All is: 26
+CV survSL.coxph, fold 6
+CV survSL.weibreg, fold 6
+CV survSL.rfsrc, fold 6
+CV All, fold 7
+Number of covariates in All is: 26
+CV survSL.coxph, fold 7
+CV survSL.weibreg, fold 7
+CV survSL.rfsrc, fold 7
+CV All, fold 8
+Number of covariates in All is: 26
+CV survSL.coxph, fold 8
+CV survSL.weibreg, fold 8
+CV survSL.rfsrc, fold 8
+CV All, fold 9
+Number of covariates in All is: 26
+CV survSL.coxph, fold 9
+CV survSL.weibreg, fold 9
+CV survSL.rfsrc, fold 9
+CV All, fold 10
+Number of covariates in All is: 26
+CV survSL.coxph, fold 10
+CV survSL.weibreg, fold 10
+CV survSL.rfsrc, fold 10
+CV All, fold 1
+Number of covariates in All is: 26
+CV survSL.coxph, fold 1
+CV survSL.weibreg, fold 1
+CV survSL.rfsrc, fold 1
+CV All, fold 2
+Number of covariates in All is: 26
+CV survSL.coxph, fold 2
+CV survSL.weibreg, fold 2
+CV survSL.rfsrc, fold 2
+CV All, fold 3
+Number of covariates in All is: 26
+CV survSL.coxph, fold 3
+CV survSL.weibreg, fold 3
+CV survSL.rfsrc, fold 3
+CV All, fold 4
+Number of covariates in All is: 26
+CV survSL.coxph, fold 4
+CV survSL.weibreg, fold 4
+CV survSL.rfsrc, fold 4
+CV All, fold 5
+Number of covariates in All is: 26
+CV survSL.coxph, fold 5
+CV survSL.weibreg, fold 5
+CV survSL.rfsrc, fold 5
+CV All, fold 6
+Number of covariates in All is: 26
+CV survSL.coxph, fold 6
+CV survSL.weibreg, fold 6
+CV survSL.rfsrc, fold 6
+CV All, fold 7
+Number of covariates in All is: 26
+CV survSL.coxph, fold 7
+CV survSL.weibreg, fold 7
+CV survSL.rfsrc, fold 7
+CV All, fold 8
+Number of covariates in All is: 26
+CV survSL.coxph, fold 8
+CV survSL.weibreg, fold 8
+CV survSL.rfsrc, fold 8
+CV All, fold 9
+Number of covariates in All is: 26
+CV survSL.coxph, fold 9
+CV survSL.weibreg, fold 9
+CV survSL.rfsrc, fold 9
+CV All, fold 10
+Number of covariates in All is: 26
+CV survSL.coxph, fold 10
+CV survSL.weibreg, fold 10
+CV survSL.rfsrc, fold 10
+Performing iterative SuperLearner...
+Converged in 2 iterations.
+full survSL.coxph
+full survSL.weibreg
+full survSL.rfsrc
+full survSL.coxph
+full survSL.weibreg
+full survSL.rfsrc
+CV All, fold 1
+Number of covariates in All is: 26
+CV survSL.coxph, fold 1
+CV survSL.weibreg, fold 1
+CV survSL.rfsrc, fold 1
+CV All, fold 2
+Number of covariates in All is: 26
+CV survSL.coxph, fold 2
+CV survSL.weibreg, fold 2
+CV survSL.rfsrc, fold 2
+CV All, fold 3
+Number of covariates in All is: 26
+CV survSL.coxph, fold 3
+CV survSL.weibreg, fold 3
+CV survSL.rfsrc, fold 3
+CV All, fold 4
+Number of covariates in All is: 26
+CV survSL.coxph, fold 4
+CV survSL.weibreg, fold 4
+CV survSL.rfsrc, fold 4
+CV All, fold 5
+Number of covariates in All is: 26
+CV survSL.coxph, fold 5
+CV survSL.weibreg, fold 5
+CV survSL.rfsrc, fold 5
+CV All, fold 6
+Number of covariates in All is: 26
+CV survSL.coxph, fold 6
+CV survSL.weibreg, fold 6
+CV survSL.rfsrc, fold 6
+CV All, fold 7
+Number of covariates in All is: 26
+CV survSL.coxph, fold 7
+CV survSL.weibreg, fold 7
+CV survSL.rfsrc, fold 7
+CV All, fold 8
+Number of covariates in All is: 26
+CV survSL.coxph, fold 8
+CV survSL.weibreg, fold 8
+CV survSL.rfsrc, fold 8
+CV All, fold 9
+Number of covariates in All is: 26
+CV survSL.coxph, fold 9
+CV survSL.weibreg, fold 9
+CV survSL.rfsrc, fold 9
+CV All, fold 10
+Number of covariates in All is: 26
+CV survSL.coxph, fold 10
+CV survSL.weibreg, fold 10
+CV survSL.rfsrc, fold 10
+CV All, fold 1
+Number of covariates in All is: 26
+CV survSL.coxph, fold 1
+CV survSL.weibreg, fold 1
+CV survSL.rfsrc, fold 1
+CV All, fold 2
+Number of covariates in All is: 26
+CV survSL.coxph, fold 2
+CV survSL.weibreg, fold 2
+CV survSL.rfsrc, fold 2
+CV All, fold 3
+Number of covariates in All is: 26
+CV survSL.coxph, fold 3
+CV survSL.weibreg, fold 3
+CV survSL.rfsrc, fold 3
+CV All, fold 4
+Number of covariates in All is: 26
+CV survSL.coxph, fold 4
+CV survSL.weibreg, fold 4
+CV survSL.rfsrc, fold 4
+CV All, fold 5
+Number of covariates in All is: 26
+CV survSL.coxph, fold 5
+CV survSL.weibreg, fold 5
+CV survSL.rfsrc, fold 5
+CV All, fold 6
+Number of covariates in All is: 26
+CV survSL.coxph, fold 6
+CV survSL.weibreg, fold 6
+CV survSL.rfsrc, fold 6
+CV All, fold 7
+Number of covariates in All is: 26
+CV survSL.coxph, fold 7
+CV survSL.weibreg, fold 7
+CV survSL.rfsrc, fold 7
+CV All, fold 8
+Number of covariates in All is: 26
+CV survSL.coxph, fold 8
+CV survSL.weibreg, fold 8
+CV survSL.rfsrc, fold 8
+CV All, fold 9
+Number of covariates in All is: 26
+CV survSL.coxph, fold 9
+CV survSL.weibreg, fold 9
+CV survSL.rfsrc, fold 9
+CV All, fold 10
+Number of covariates in All is: 26
+CV survSL.coxph, fold 10
+CV survSL.weibreg, fold 10
+CV survSL.rfsrc, fold 10
+Performing iterative SuperLearner...
+Converged in 2 iterations.
+full survSL.coxph
+full survSL.weibreg
+full survSL.rfsrc
+full survSL.coxph
+full survSL.weibreg
+full survSL.rfsrc
+CV All, fold 1
+Number of covariates in All is: 26
+CV survSL.coxph, fold 1
+CV survSL.weibreg, fold 1
+CV survSL.rfsrc, fold 1
+CV All, fold 2
+Number of covariates in All is: 26
+CV survSL.coxph, fold 2
+CV survSL.weibreg, fold 2
+CV survSL.rfsrc, fold 2
+CV All, fold 3
+Number of covariates in All is: 26
+CV survSL.coxph, fold 3
+CV survSL.weibreg, fold 3
+CV survSL.rfsrc, fold 3
+CV All, fold 4
+Number of covariates in All is: 26
+CV survSL.coxph, fold 4
+CV survSL.weibreg, fold 4
+CV survSL.rfsrc, fold 4
+CV All, fold 5
+Number of covariates in All is: 26
+CV survSL.coxph, fold 5
+CV survSL.weibreg, fold 5
+CV survSL.rfsrc, fold 5
+CV All, fold 6
+Number of covariates in All is: 26
+CV survSL.coxph, fold 6
+CV survSL.weibreg, fold 6
+CV survSL.rfsrc, fold 6
+CV All, fold 7
+Number of covariates in All is: 26
+CV survSL.coxph, fold 7
+CV survSL.weibreg, fold 7
+CV survSL.rfsrc, fold 7
+CV All, fold 8
+Number of covariates in All is: 26
+CV survSL.coxph, fold 8
+CV survSL.weibreg, fold 8
+CV survSL.rfsrc, fold 8
+CV All, fold 9
+Number of covariates in All is: 26
+CV survSL.coxph, fold 9
+CV survSL.weibreg, fold 9
+CV survSL.rfsrc, fold 9
+CV All, fold 10
+Number of covariates in All is: 26
+CV survSL.coxph, fold 10
+CV survSL.weibreg, fold 10
+CV survSL.rfsrc, fold 10
+CV All, fold 1
+Number of covariates in All is: 26
+CV survSL.coxph, fold 1
+CV survSL.weibreg, fold 1
+CV survSL.rfsrc, fold 1
+CV All, fold 2
+Number of covariates in All is: 26
+CV survSL.coxph, fold 2
+CV survSL.weibreg, fold 2
+CV survSL.rfsrc, fold 2
+CV All, fold 3
+Number of covariates in All is: 26
+CV survSL.coxph, fold 3
+CV survSL.weibreg, fold 3
+CV survSL.rfsrc, fold 3
+CV All, fold 4
+Number of covariates in All is: 26
+CV survSL.coxph, fold 4
+CV survSL.weibreg, fold 4
+CV survSL.rfsrc, fold 4
+CV All, fold 5
+Number of covariates in All is: 26
+CV survSL.coxph, fold 5
+CV survSL.weibreg, fold 5
+CV survSL.rfsrc, fold 5
+CV All, fold 6
+Number of covariates in All is: 26
+CV survSL.coxph, fold 6
+CV survSL.weibreg, fold 6
+CV survSL.rfsrc, fold 6
+CV All, fold 7
+Number of covariates in All is: 26
+CV survSL.coxph, fold 7
+CV survSL.weibreg, fold 7
+CV survSL.rfsrc, fold 7
+CV All, fold 8
+Number of covariates in All is: 26
+CV survSL.coxph, fold 8
+CV survSL.weibreg, fold 8
+CV survSL.rfsrc, fold 8
+CV All, fold 9
+Number of covariates in All is: 26
+CV survSL.coxph, fold 9
+CV survSL.weibreg, fold 9
+CV survSL.rfsrc, fold 9
+CV All, fold 10
+Number of covariates in All is: 26
+CV survSL.coxph, fold 10
+CV survSL.weibreg, fold 10
+CV survSL.rfsrc, fold 10
+Performing iterative SuperLearner...
+Converged in 2 iterations.
+full survSL.coxph
+full survSL.weibreg
+full survSL.rfsrc
+full survSL.coxph
+full survSL.weibreg
+full survSL.rfsrc
+CV All, fold 1
+Number of covariates in All is: 26
+CV survSL.coxph, fold 1
+CV survSL.weibreg, fold 1
+CV survSL.rfsrc, fold 1
+CV All, fold 2
+Number of covariates in All is: 26
+CV survSL.coxph, fold 2
+CV survSL.weibreg, fold 2
+CV survSL.rfsrc, fold 2
+CV All, fold 3
+Number of covariates in All is: 26
+CV survSL.coxph, fold 3
+CV survSL.weibreg, fold 3
+CV survSL.rfsrc, fold 3
+CV All, fold 4
+Number of covariates in All is: 26
+CV survSL.coxph, fold 4
+CV survSL.weibreg, fold 4
+CV survSL.rfsrc, fold 4
+CV All, fold 5
+Number of covariates in All is: 26
+CV survSL.coxph, fold 5
+CV survSL.weibreg, fold 5
+CV survSL.rfsrc, fold 5
+CV All, fold 6
+Number of covariates in All is: 26
+CV survSL.coxph, fold 6
+CV survSL.weibreg, fold 6
+CV survSL.rfsrc, fold 6
+CV All, fold 7
+Number of covariates in All is: 26
+CV survSL.coxph, fold 7
+CV survSL.weibreg, fold 7
+CV survSL.rfsrc, fold 7
+CV All, fold 8
+Number of covariates in All is: 26
+CV survSL.coxph, fold 8
+CV survSL.weibreg, fold 8
+CV survSL.rfsrc, fold 8
+CV All, fold 9
+Number of covariates in All is: 26
+CV survSL.coxph, fold 9
+CV survSL.weibreg, fold 9
+CV survSL.rfsrc, fold 9
+CV All, fold 10
+Number of covariates in All is: 26
+CV survSL.coxph, fold 10
+CV survSL.weibreg, fold 10
+CV survSL.rfsrc, fold 10
+CV All, fold 1
+Number of covariates in All is: 26
+CV survSL.coxph, fold 1
+CV survSL.weibreg, fold 1
+CV survSL.rfsrc, fold 1
+CV All, fold 2
+Number of covariates in All is: 26
+CV survSL.coxph, fold 2
+CV survSL.weibreg, fold 2
+CV survSL.rfsrc, fold 2
+CV All, fold 3
+Number of covariates in All is: 26
+CV survSL.coxph, fold 3
+CV survSL.weibreg, fold 3
+CV survSL.rfsrc, fold 3
+CV All, fold 4
+Number of covariates in All is: 26
+CV survSL.coxph, fold 4
+CV survSL.weibreg, fold 4
+CV survSL.rfsrc, fold 4
+CV All, fold 5
+Number of covariates in All is: 26
+CV survSL.coxph, fold 5
+CV survSL.weibreg, fold 5
+CV survSL.rfsrc, fold 5
+CV All, fold 6
+Number of covariates in All is: 26
+CV survSL.coxph, fold 6
+CV survSL.weibreg, fold 6
+CV survSL.rfsrc, fold 6
+CV All, fold 7
+Number of covariates in All is: 26
+CV survSL.coxph, fold 7
+CV survSL.weibreg, fold 7
+CV survSL.rfsrc, fold 7
+CV All, fold 8
+Number of covariates in All is: 26
+CV survSL.coxph, fold 8
+CV survSL.weibreg, fold 8
+CV survSL.rfsrc, fold 8
+CV All, fold 9
+Number of covariates in All is: 26
+CV survSL.coxph, fold 9
+CV survSL.weibreg, fold 9
+CV survSL.rfsrc, fold 9
+CV All, fold 10
+Number of covariates in All is: 26
+CV survSL.coxph, fold 10
+CV survSL.weibreg, fold 10
+CV survSL.rfsrc, fold 10
+Performing iterative SuperLearner...
+Converged in 2 iterations.
+full survSL.coxph
+full survSL.weibreg
+full survSL.rfsrc
+full survSL.coxph
+full survSL.weibreg
+full survSL.rfsrc
+CV All, fold 1
+Number of covariates in All is: 26
+CV survSL.coxph, fold 1
+CV survSL.weibreg, fold 1
+CV survSL.rfsrc, fold 1
+CV All, fold 2
+Number of covariates in All is: 26
+CV survSL.coxph, fold 2
+CV survSL.weibreg, fold 2
+CV survSL.rfsrc, fold 2
+CV All, fold 3
+Number of covariates in All is: 26
+CV survSL.coxph, fold 3
+CV survSL.weibreg, fold 3
+CV survSL.rfsrc, fold 3
+CV All, fold 4
+Number of covariates in All is: 26
+CV survSL.coxph, fold 4
+CV survSL.weibreg, fold 4
+CV survSL.rfsrc, fold 4
+CV All, fold 5
+Number of covariates in All is: 26
+CV survSL.coxph, fold 5
+CV survSL.weibreg, fold 5
+CV survSL.rfsrc, fold 5
+CV All, fold 6
+Number of covariates in All is: 26
+CV survSL.coxph, fold 6
+CV survSL.weibreg, fold 6
+CV survSL.rfsrc, fold 6
+CV All, fold 7
+Number of covariates in All is: 26
+CV survSL.coxph, fold 7
+CV survSL.weibreg, fold 7
+CV survSL.rfsrc, fold 7
+CV All, fold 8
+Number of covariates in All is: 26
+CV survSL.coxph, fold 8
+CV survSL.weibreg, fold 8
+CV survSL.rfsrc, fold 8
+CV All, fold 9
+Number of covariates in All is: 26
+CV survSL.coxph, fold 9
+CV survSL.weibreg, fold 9
+CV survSL.rfsrc, fold 9
+CV All, fold 10
+Number of covariates in All is: 26
+CV survSL.coxph, fold 10
+CV survSL.weibreg, fold 10
+CV survSL.rfsrc, fold 10
+CV All, fold 1
+Number of covariates in All is: 26
+CV survSL.coxph, fold 1
+CV survSL.weibreg, fold 1
+CV survSL.rfsrc, fold 1
+CV All, fold 2
+Number of covariates in All is: 26
+CV survSL.coxph, fold 2
+CV survSL.weibreg, fold 2
+CV survSL.rfsrc, fold 2
+CV All, fold 3
+Number of covariates in All is: 26
+CV survSL.coxph, fold 3
+CV survSL.weibreg, fold 3
+CV survSL.rfsrc, fold 3
+CV All, fold 4
+Number of covariates in All is: 26
+CV survSL.coxph, fold 4
+CV survSL.weibreg, fold 4
+CV survSL.rfsrc, fold 4
+CV All, fold 5
+Number of covariates in All is: 26
+CV survSL.coxph, fold 5
+CV survSL.weibreg, fold 5
+CV survSL.rfsrc, fold 5
+CV All, fold 6
+Number of covariates in All is: 26
+CV survSL.coxph, fold 6
+CV survSL.weibreg, fold 6
+CV survSL.rfsrc, fold 6
+CV All, fold 7
+Number of covariates in All is: 26
+CV survSL.coxph, fold 7
+CV survSL.weibreg, fold 7
+CV survSL.rfsrc, fold 7
+CV All, fold 8
+Number of covariates in All is: 26
+CV survSL.coxph, fold 8
+CV survSL.weibreg, fold 8
+CV survSL.rfsrc, fold 8
+CV All, fold 9
+Number of covariates in All is: 26
+CV survSL.coxph, fold 9
+CV survSL.weibreg, fold 9
+CV survSL.rfsrc, fold 9
+CV All, fold 10
+Number of covariates in All is: 26
+CV survSL.coxph, fold 10
+CV survSL.weibreg, fold 10
+CV survSL.rfsrc, fold 10
+Performing iterative SuperLearner...
+Converged in 2 iterations.
+full survSL.coxph
+full survSL.weibreg
+full survSL.rfsrc
+full survSL.coxph
+full survSL.weibreg
+full survSL.rfsrc
+CV All, fold 1
+Number of covariates in All is: 26
+CV survSL.coxph, fold 1
+CV survSL.weibreg, fold 1
+CV survSL.rfsrc, fold 1
+CV All, fold 2
+Number of covariates in All is: 26
+CV survSL.coxph, fold 2
+CV survSL.weibreg, fold 2
+CV survSL.rfsrc, fold 2
+CV All, fold 3
+Number of covariates in All is: 26
+CV survSL.coxph, fold 3
+CV survSL.weibreg, fold 3
+CV survSL.rfsrc, fold 3
+CV All, fold 4
+Number of covariates in All is: 26
+CV survSL.coxph, fold 4
+CV survSL.weibreg, fold 4
+CV survSL.rfsrc, fold 4
+CV All, fold 5
+Number of covariates in All is: 26
+CV survSL.coxph, fold 5
+CV survSL.weibreg, fold 5
+CV survSL.rfsrc, fold 5
+CV All, fold 6
+Number of covariates in All is: 26
+CV survSL.coxph, fold 6
+CV survSL.weibreg, fold 6
+CV survSL.rfsrc, fold 6
+CV All, fold 7
+Number of covariates in All is: 26
+CV survSL.coxph, fold 7
+CV survSL.weibreg, fold 7
+CV survSL.rfsrc, fold 7
+CV All, fold 8
+Number of covariates in All is: 26
+CV survSL.coxph, fold 8
+CV survSL.weibreg, fold 8
+CV survSL.rfsrc, fold 8
+CV All, fold 9
+Number of covariates in All is: 26
+CV survSL.coxph, fold 9
+CV survSL.weibreg, fold 9
+CV survSL.rfsrc, fold 9
+CV All, fold 10
+Number of covariates in All is: 26
+CV survSL.coxph, fold 10
+CV survSL.weibreg, fold 10
+CV survSL.rfsrc, fold 10
+CV All, fold 1
+Number of covariates in All is: 26
+CV survSL.coxph, fold 1
+CV survSL.weibreg, fold 1
+CV survSL.rfsrc, fold 1
+CV All, fold 2
+Number of covariates in All is: 26
+CV survSL.coxph, fold 2
+CV survSL.weibreg, fold 2
+CV survSL.rfsrc, fold 2
+CV All, fold 3
+Number of covariates in All is: 26
+CV survSL.coxph, fold 3
+CV survSL.weibreg, fold 3
+CV survSL.rfsrc, fold 3
+CV All, fold 4
+Number of covariates in All is: 26
+CV survSL.coxph, fold 4
+CV survSL.weibreg, fold 4
+CV survSL.rfsrc, fold 4
+CV All, fold 5
+Number of covariates in All is: 26
+CV survSL.coxph, fold 5
+CV survSL.weibreg, fold 5
+CV survSL.rfsrc, fold 5
+CV All, fold 6
+Number of covariates in All is: 26
+CV survSL.coxph, fold 6
+CV survSL.weibreg, fold 6
+CV survSL.rfsrc, fold 6
+CV All, fold 7
+Number of covariates in All is: 26
+CV survSL.coxph, fold 7
+CV survSL.weibreg, fold 7
+CV survSL.rfsrc, fold 7
+CV All, fold 8
+Number of covariates in All is: 26
+CV survSL.coxph, fold 8
+CV survSL.weibreg, fold 8
+CV survSL.rfsrc, fold 8
+CV All, fold 9
+Number of covariates in All is: 26
+CV survSL.coxph, fold 9
+CV survSL.weibreg, fold 9
+CV survSL.rfsrc, fold 9
+CV All, fold 10
+Number of covariates in All is: 26
+CV survSL.coxph, fold 10
+CV survSL.weibreg, fold 10
+CV survSL.rfsrc, fold 10
+Performing iterative SuperLearner...
+Converged in 2 iterations.
+full survSL.coxph
+full survSL.weibreg
+full survSL.rfsrc
+full survSL.coxph
+full survSL.weibreg
+full survSL.rfsrc
+CV All, fold 1
+Number of covariates in All is: 26
+CV survSL.coxph, fold 1
+CV survSL.weibreg, fold 1
+CV survSL.rfsrc, fold 1
+CV All, fold 2
+Number of covariates in All is: 26
+CV survSL.coxph, fold 2
+CV survSL.weibreg, fold 2
+CV survSL.rfsrc, fold 2
+CV All, fold 3
+Number of covariates in All is: 26
+CV survSL.coxph, fold 3
+CV survSL.weibreg, fold 3
+CV survSL.rfsrc, fold 3
+CV All, fold 4
+Number of covariates in All is: 26
+CV survSL.coxph, fold 4
+CV survSL.weibreg, fold 4
+CV survSL.rfsrc, fold 4
+CV All, fold 5
+Number of covariates in All is: 26
+CV survSL.coxph, fold 5
+CV survSL.weibreg, fold 5
+CV survSL.rfsrc, fold 5
+CV All, fold 6
+Number of covariates in All is: 26
+CV survSL.coxph, fold 6
+CV survSL.weibreg, fold 6
+CV survSL.rfsrc, fold 6
+CV All, fold 7
+Number of covariates in All is: 26
+CV survSL.coxph, fold 7
+CV survSL.weibreg, fold 7
+CV survSL.rfsrc, fold 7
+CV All, fold 8
+Number of covariates in All is: 26
+CV survSL.coxph, fold 8
+CV survSL.weibreg, fold 8
+CV survSL.rfsrc, fold 8
+CV All, fold 9
+Number of covariates in All is: 26
+CV survSL.coxph, fold 9
+CV survSL.weibreg, fold 9
+CV survSL.rfsrc, fold 9
+CV All, fold 10
+Number of covariates in All is: 26
+CV survSL.coxph, fold 10
+CV survSL.weibreg, fold 10
+CV survSL.rfsrc, fold 10
+CV All, fold 1
+Number of covariates in All is: 26
+CV survSL.coxph, fold 1
+CV survSL.weibreg, fold 1
+CV survSL.rfsrc, fold 1
+CV All, fold 2
+Number of covariates in All is: 26
+CV survSL.coxph, fold 2
+CV survSL.weibreg, fold 2
+CV survSL.rfsrc, fold 2
+CV All, fold 3
+Number of covariates in All is: 26
+CV survSL.coxph, fold 3
+CV survSL.weibreg, fold 3
+CV survSL.rfsrc, fold 3
+CV All, fold 4
+Number of covariates in All is: 26
+CV survSL.coxph, fold 4
+CV survSL.weibreg, fold 4
+CV survSL.rfsrc, fold 4
+CV All, fold 5
+Number of covariates in All is: 26
+CV survSL.coxph, fold 5
+CV survSL.weibreg, fold 5
+CV survSL.rfsrc, fold 5
+CV All, fold 6
+Number of covariates in All is: 26
+CV survSL.coxph, fold 6
+CV survSL.weibreg, fold 6
+CV survSL.rfsrc, fold 6
+CV All, fold 7
+Number of covariates in All is: 26
+CV survSL.coxph, fold 7
+CV survSL.weibreg, fold 7
+CV survSL.rfsrc, fold 7
+CV All, fold 8
+Number of covariates in All is: 26
+CV survSL.coxph, fold 8
+CV survSL.weibreg, fold 8
+CV survSL.rfsrc, fold 8
+CV All, fold 9
+Number of covariates in All is: 26
+CV survSL.coxph, fold 9
+CV survSL.weibreg, fold 9
+CV survSL.rfsrc, fold 9
+CV All, fold 10
+Number of covariates in All is: 26
+CV survSL.coxph, fold 10
+CV survSL.weibreg, fold 10
+CV survSL.rfsrc, fold 10
+Performing iterative SuperLearner...
+Converged in 2 iterations.
+full survSL.coxph
+full survSL.weibreg
+full survSL.rfsrc
+full survSL.coxph
+full survSL.weibreg
+full survSL.rfsrc
+CV All, fold 1
+Number of covariates in All is: 26
+CV survSL.coxph, fold 1
+CV survSL.weibreg, fold 1
+CV survSL.rfsrc, fold 1
+CV All, fold 2
+Number of covariates in All is: 26
+CV survSL.coxph, fold 2
+CV survSL.weibreg, fold 2
+CV survSL.rfsrc, fold 2
+CV All, fold 3
+Number of covariates in All is: 26
+CV survSL.coxph, fold 3
+CV survSL.weibreg, fold 3
+CV survSL.rfsrc, fold 3
+CV All, fold 4
+Number of covariates in All is: 26
+CV survSL.coxph, fold 4
+CV survSL.weibreg, fold 4
+CV survSL.rfsrc, fold 4
+CV All, fold 5
+Number of covariates in All is: 26
+CV survSL.coxph, fold 5
+CV survSL.weibreg, fold 5
+CV survSL.rfsrc, fold 5
+CV All, fold 6
+Number of covariates in All is: 26
+CV survSL.coxph, fold 6
+CV survSL.weibreg, fold 6
+CV survSL.rfsrc, fold 6
+CV All, fold 7
+Number of covariates in All is: 26
+CV survSL.coxph, fold 7
+CV survSL.weibreg, fold 7
+CV survSL.rfsrc, fold 7
+CV All, fold 8
+Number of covariates in All is: 26
+CV survSL.coxph, fold 8
+CV survSL.weibreg, fold 8
+CV survSL.rfsrc, fold 8
+CV All, fold 9
+Number of covariates in All is: 26
+CV survSL.coxph, fold 9
+CV survSL.weibreg, fold 9
+CV survSL.rfsrc, fold 9
+CV All, fold 10
+Number of covariates in All is: 26
+CV survSL.coxph, fold 10
+CV survSL.weibreg, fold 10
+CV survSL.rfsrc, fold 10
+CV All, fold 1
+Number of covariates in All is: 26
+CV survSL.coxph, fold 1
+CV survSL.weibreg, fold 1
+CV survSL.rfsrc, fold 1
+CV All, fold 2
+Number of covariates in All is: 26
+CV survSL.coxph, fold 2
+CV survSL.weibreg, fold 2
+CV survSL.rfsrc, fold 2
+CV All, fold 3
+Number of covariates in All is: 26
+CV survSL.coxph, fold 3
+CV survSL.weibreg, fold 3
+CV survSL.rfsrc, fold 3
+CV All, fold 4
+Number of covariates in All is: 26
+CV survSL.coxph, fold 4
+CV survSL.weibreg, fold 4
+CV survSL.rfsrc, fold 4
+CV All, fold 5
+Number of covariates in All is: 26
+CV survSL.coxph, fold 5
+CV survSL.weibreg, fold 5
+CV survSL.rfsrc, fold 5
+CV All, fold 6
+Number of covariates in All is: 26
+CV survSL.coxph, fold 6
+CV survSL.weibreg, fold 6
+CV survSL.rfsrc, fold 6
+CV All, fold 7
+Number of covariates in All is: 26
+CV survSL.coxph, fold 7
+CV survSL.weibreg, fold 7
+CV survSL.rfsrc, fold 7
+CV All, fold 8
+Number of covariates in All is: 26
+CV survSL.coxph, fold 8
+CV survSL.weibreg, fold 8
+CV survSL.rfsrc, fold 8
+CV All, fold 9
+Number of covariates in All is: 26
+CV survSL.coxph, fold 9
+CV survSL.weibreg, fold 9
+CV survSL.rfsrc, fold 9
+CV All, fold 10
+Number of covariates in All is: 26
+CV survSL.coxph, fold 10
+CV survSL.weibreg, fold 10
+CV survSL.rfsrc, fold 10
+Performing iterative SuperLearner...
+Converged in 2 iterations.
+full survSL.coxph
+full survSL.weibreg
+full survSL.rfsrc
+full survSL.coxph
+full survSL.weibreg
+full survSL.rfsrc
+CV All, fold 1
+Number of covariates in All is: 26
+CV survSL.coxph, fold 1
+CV survSL.weibreg, fold 1
+CV survSL.rfsrc, fold 1
+CV All, fold 2
+Number of covariates in All is: 26
+CV survSL.coxph, fold 2
+CV survSL.weibreg, fold 2
+CV survSL.rfsrc, fold 2
+CV All, fold 3
+Number of covariates in All is: 26
+CV survSL.coxph, fold 3
+CV survSL.weibreg, fold 3
+CV survSL.rfsrc, fold 3
+CV All, fold 4
+Number of covariates in All is: 26
+CV survSL.coxph, fold 4
+CV survSL.weibreg, fold 4
+CV survSL.rfsrc, fold 4
+CV All, fold 5
+Number of covariates in All is: 26
+CV survSL.coxph, fold 5
+CV survSL.weibreg, fold 5
+CV survSL.rfsrc, fold 5
+CV All, fold 6
+Number of covariates in All is: 26
+CV survSL.coxph, fold 6
+CV survSL.weibreg, fold 6
+CV survSL.rfsrc, fold 6
+CV All, fold 7
+Number of covariates in All is: 26
+CV survSL.coxph, fold 7
+CV survSL.weibreg, fold 7
+CV survSL.rfsrc, fold 7
+CV All, fold 8
+Number of covariates in All is: 26
+CV survSL.coxph, fold 8
+CV survSL.weibreg, fold 8
+CV survSL.rfsrc, fold 8
+CV All, fold 9
+Number of covariates in All is: 26
+CV survSL.coxph, fold 9
+CV survSL.weibreg, fold 9
+CV survSL.rfsrc, fold 9
+CV All, fold 10
+Number of covariates in All is: 26
+CV survSL.coxph, fold 10
+CV survSL.weibreg, fold 10
+CV survSL.rfsrc, fold 10
+CV All, fold 1
+Number of covariates in All is: 26
+CV survSL.coxph, fold 1
+CV survSL.weibreg, fold 1
+CV survSL.rfsrc, fold 1
+CV All, fold 2
+Number of covariates in All is: 26
+CV survSL.coxph, fold 2
+CV survSL.weibreg, fold 2
+CV survSL.rfsrc, fold 2
+CV All, fold 3
+Number of covariates in All is: 26
+CV survSL.coxph, fold 3
+CV survSL.weibreg, fold 3
+CV survSL.rfsrc, fold 3
+CV All, fold 4
+Number of covariates in All is: 26
+CV survSL.coxph, fold 4
+CV survSL.weibreg, fold 4
+CV survSL.rfsrc, fold 4
+CV All, fold 5
+Number of covariates in All is: 26
+CV survSL.coxph, fold 5
+CV survSL.weibreg, fold 5
+CV survSL.rfsrc, fold 5
+CV All, fold 6
+Number of covariates in All is: 26
+CV survSL.coxph, fold 6
+CV survSL.weibreg, fold 6
+CV survSL.rfsrc, fold 6
+CV All, fold 7
+Number of covariates in All is: 26
+CV survSL.coxph, fold 7
+CV survSL.weibreg, fold 7
+CV survSL.rfsrc, fold 7
+CV All, fold 8
+Number of covariates in All is: 26
+CV survSL.coxph, fold 8
+CV survSL.weibreg, fold 8
+CV survSL.rfsrc, fold 8
+CV All, fold 9
+Number of covariates in All is: 26
+CV survSL.coxph, fold 9
+CV survSL.weibreg, fold 9
+CV survSL.rfsrc, fold 9
+CV All, fold 10
+Number of covariates in All is: 26
+CV survSL.coxph, fold 10
+CV survSL.weibreg, fold 10
+CV survSL.rfsrc, fold 10
+Performing iterative SuperLearner...
+Converged in 2 iterations.
+full survSL.coxph
+full survSL.weibreg
+full survSL.rfsrc
+full survSL.coxph
+full survSL.weibreg
+full survSL.rfsrc
+There were 50 or more warnings (use warnings() to see the first 50)
+> 
+> library(ggplot2)
+> fit$surv.df
+   time trt      surv           se  se.logit ptwise.lower ptwise.upper
+1     0   0 1.0000000 0.0000000000 0.0000000    1.0000000    1.0000000
+2   150   0 0.9995339 0.0002595501 0.5571367    0.9990252    1.0000000
+3   300   0 0.9988206 0.0004152912 0.3525329    0.9980066    0.9996346
+4   450   0 0.9983776 0.0005468271 0.3375960    0.9973058    0.9994494
+5   600   0 0.9978007 0.0006099584 0.2779510    0.9966052    0.9989962
+6   750   0 0.9966520 0.0007357591 0.2204962    0.9952099    0.9980940
+7   900   0 0.9939538 0.0028177446 0.4688716    0.9884310    0.9994766
+8  1050   0 0.9932291 0.0028444985 0.4229684    0.9876539    0.9988043
+9  1200   0 0.9929427 0.0028638963 0.4086912    0.9873295    0.9985560
+10 1350   0 0.9922114 0.0028926486 0.3743093    0.9865418    0.9978810
+11 1500   0 0.9908616 0.0029521063 0.3260234    0.9850755    0.9966477
+12 1650   0 0.9901846 0.0029980470 0.3084719    0.9843085    0.9960608
+13 1800   0 0.9891471 0.0030760891 0.2865446    0.9831180    0.9951762
+14 1950   0 0.9877524 0.0031305351 0.2587726    0.9816165    0.9938882
+15    0   1 1.0000000 0.0000000000 0.0000000    1.0000000    1.0000000
+16  150   1 0.9985302 0.0005309735 0.3617781    0.9974895    0.9995709
+17  300   1 0.9972507 0.0009174739 0.3346345    0.9954525    0.9990490
+18  450   1 0.9965486 0.0010630714 0.3090815    0.9944650    0.9986323
+19  600   1 0.9954543 0.0012493984 0.2761054    0.9930054    0.9979031
+20  750   1 0.9948007 0.0014410179 0.2722422    0.9918541    0.9975029
+21  900   1 0.9948007 0.0016121062 0.3191410    0.9917631    0.9980826
+22 1050   1 0.9944813 0.0017042336 0.3105224    0.9911410    0.9978216
+23 1200   1 0.9933899 0.0018793435 0.2862060    0.9897064    0.9970734
+24 1350   1 0.9930134 0.0021254746 0.3063600    0.9888474    0.9971793
+25 1500   1 0.9921281 0.0022948904 0.2938422    0.9876301    0.9966261
+26 1650   1 0.9907720 0.0026160780 0.2861332    0.9856445    0.9958995
+27 1800   1 0.9904357 0.0028417435 0.2999902    0.9848659    0.9960056
+28 1950   1 0.9896744 0.0031699659 0.3102044    0.9834613    0.9958876
+   ptwise.logit.lower ptwise.logit.upper unif.ew.lower unif.ew.upper
+1           1.0000000          1.0000000     1.0000000     1.0000000
+2           0.9986123          0.9998436     0.9931378     1.0000000
+3           0.9976491          0.9994087     0.9924245     1.0000000
+4           0.9968605          0.9991622     0.9919815     1.0000000
+5           0.9962139          0.9987233     0.9914045     1.0000000
+6           0.9948513          0.9978242     0.9902558     1.0000000
+7           0.9849805          0.9975792     0.9875577     1.0000000
+8           0.9846218          0.9970333     0.9868329     0.9996252
+9           0.9844125          0.9968199     0.9865466     0.9993388
+10          0.9839146          0.9962450     0.9858152     0.9986075
+11          0.9828268          0.9951557     0.9844655     0.9972577
+12          0.9821780          0.9946140     0.9837885     0.9965808
+13          0.9811235          0.9937818     0.9827510     0.9955432
+14          0.9798245          0.9925886     0.9813562     0.9941485
+15          1.0000000          1.0000000     1.0000000     1.0000000
+16          0.9970176          0.9992762     0.9922389     1.0000000
+17          0.9947160          0.9985713     0.9909594     1.0000000
+18          0.9936927          0.9981138     0.9902573     1.0000000
+19          0.9922158          0.9973490     0.9891630     1.0000000
+20          0.9909605          0.9968721     0.9885094     1.0000000
+21          0.9905514          0.9972774     0.9885094     1.0000000
+22          0.9899038          0.9969897     0.9881900     1.0000000
+23          0.9884740          0.9962172     0.9870986     0.9996812
+24          0.9873364          0.9961553     0.9867221     0.9993047
+25          0.9860829          0.9955593     0.9858368     0.9984194
+26          0.9839429          0.9947123     0.9844807     0.9970633
+27          0.9829118          0.9946649     0.9841444     0.9967270
+28          0.9811969          0.9943518     0.9833831     0.9959657
+   unif.logit.lower unif.logit.upper
+1         1.0000000        1.0000000
+2         0.9980755        0.9998872
+3         0.9971092        0.9995193
+4         0.9961739        0.9993129
+5         0.9955448        0.9989156
+6         0.9941429        0.9981248
+7         0.9803365        0.9981248
+8         0.9803365        0.9976849
+9         0.9802626        0.9974974
+10        0.9800342        0.9969845
+11        0.9792738        0.9959973
+12        0.9787097        0.9955033
+13        0.9777372        0.9947408
+14        0.9765870        0.9936279
+15        1.0000000        1.0000000
+16        0.9963902        0.9994023
+17        0.9936981        0.9988030
+18        0.9925795        0.9983981
+19        0.9910013        0.9977088
+20        0.9895735        0.9974953
+21        0.9888313        0.9974953
+22        0.9881209        0.9974449
+23        0.9866132        0.9967474
+24        0.9851392        0.9967292
+25        0.9837779        0.9961967
+26        0.9813651        0.9954523
+27        0.9800286        0.9954449
+28        0.9779144        0.9952033
+> ggplot(fit$surv.df) +
++     # geom_line(aes(time, true.surv, group=trt), color='black') +
++     geom_step(aes(time, surv, color=as.factor(trt), group=trt)) +
++     # geom_step(aes(time, ptwise.lower, color=as.factor(trt), group=trt), linetype=2) +
++     # geom_step(aes(time, ptwise.upper, color=as.factor(trt), group=trt), linetype=2) +
++     geom_step(aes(time, unif.ew.lower, color=as.factor(trt), group=trt), linetype=3) +
++     geom_step(aes(time, unif.ew.upper, color=as.factor(trt), group=trt), linetype=3) +
++     scale_color_discrete("Treatment") +
++     xlab("Time") +
++     ylab("Survival") +
++     coord_cartesian(xlim=c(0,2150), ylim=c(0.98,1))
+> save(fit, file = "~/Causal/WHI_fit.Rdata")
+> 
+> proc.time()
+      user     system    elapsed 
+128090.993    889.405  14042.492 
